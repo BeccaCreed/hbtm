@@ -21,13 +21,12 @@ class Variables:
 class SteppingClass:
     '''Class that takes discrete steps with Tinf and q arrays 
     and calculates temperature at a given x'''
-    def __init__(self,t,Tinf_array,q_array,L=0.02):
-        self.q_array = q_array
-        self.n_timesteps = len(q_array)
-        self.Tinf_array = Tinf_array #Ambient Temp
-        self.L=L #Peripheral Temp
-        self.t=t
-        self.dt=t/len(q_array)
+    #def __init__(self,t,Tinf_array,q_array,L=0.02):
+    def __init__( self, h, L, k, alpha ):
+        self.h = h
+        self.L = L
+        self.k = k
+        self.alpha = alpha
         
     def eigenvalue(self, M, Bi ): #fix this
         b = np.zeros( M )
@@ -45,72 +44,143 @@ class SteppingClass:
                 b[m] -= err
         return b
 
-    def greensStep(self,x):
-        Tinf_array = self.Tinf_array
-        q_array = self.q_array
-        K=0.5918 #W/mK
-        h = 70 #should actually be more like 18 W/(m^2 K)
-        alpha = 0.146e-6 #m^2/s
+    def greensStep( self, x, dt, Tinf_array, q_array ):
+        #Tinf_array = self.Tinf_array
+        #q_array = self.q_array
+        
+        h = self.h
+        k = self.k
+        alpha = self.alpha
         L = self.L #length of slab
-        b2 = h*L/K #Biot Number
-        dt = self.dt
-        n_iterations = 10 #This determines how many eigenvalues, currently low for speed, but can be increased for accuracy later
+        
+        b2 = h*L/k #Biot Number
+        n_iterations = 40 # This determines how many eigenvalues, currently low
+                          # for speed, but can be increased for accuracy later
         term1 = 0
         term2 = 0
         n_timesteps = len(q_array)
         bm_arr = self.eigenvalue(n_iterations,b2)
-        t = self.t
-        for M in range(n_iterations): #Overall Sum
+        t = dt * n_timesteps
+        
+        for M in range(n_iterations): # sum over eigenvalues
             bm = bm_arr[M] #array of eigenvalues
             t2 = dt
-            t1 = 0 #fix this to be current time
+            t1 = 0
             sum1 = 0
-            for i in range(n_timesteps): #inner sums
-                termA = 1/(bm**2*alpha)*np.exp(-bm**2 * alpha/L*(t-t2)) #first term in first sum
-                termB = 1/(bm**2*alpha)*np.exp(-bm**2 * alpha/L*(t-t1)) #second term in first sum
+            sum2 = 0
+            
+            for i in range( n_timesteps ): # sum over time steps
+                termA = 1/(bm**2*alpha)*np.exp(-bm**2 * alpha/L**2*(t-t2))
+                termB = 1/(bm**2*alpha)*np.exp(-bm**2 * alpha/L**2*(t-t1))
                 sum1 += (termA - termB)*q_array[i]
+                sum2 += (termA - termB)*Tinf_array[i]
                 t1 += dt
                 t2 += dt
-            term1 += 2*alpha*L**2/(K*bm)*((bm**2+b2**2)/(bm**2+b2**2+b2))*np.cos(bm*x/L)*np.sin(bm)*sum1 #This should be M not i, I think
-            term2 += 2*alpha*L/(1)*((bm**2+b2**2)/(bm**2+b2**2+b2))*np.cos(bm*x/L)*np.cos(bm)*sum1*Tinf_array[i]*h/K
+
+            Fm = (bm**2+b2**2)/(bm**2+b2**2+b2) * np.cos(bm*x/L)
+            term1 += 2*alpha*L**2/(k*bm) * Fm * np.sin(bm) * sum1 
+            term2 += 2*alpha*L * Fm * np.cos(bm) * sum2*h/k
+            
         return (term1+term2)
+
+
+def testSteppingClass( j ):
+
+    if j == 0:
+        # All parms unity and T_inf = 0.  The steady state solution for this
+        # block of hard-coded inputs should be T_surf = 1 and T_core = 1.5.
+        # Convergence reached at Nm = 20.
+        N = 20
+        dt = 1
+        Tinf = np.zeros( N )
+        qgen = np.ones( N )
+        L = 1
+        G = SteppingClass( 1, L, 1, 1 )
         
-if __name__ == '__main__':
-    def makeData():
-        qv = 0#400000 #This is to set q high to force the temperature up to a reasonable value
-        tinfv = 0
-        G=SteppingClass(t=60,Tinf_array=[tinfv],q_array=[qv]) #this t becomes dt in stepping function
-        t_initial = G.t
-        dt = G.dt
-        N=180
-        coreTemp_list = np.zeros(N) #Preallocate space
-        periphTemp_list = np.zeros(N) #Preallocate space
-        Tinfs = np.ones(N)*tinfv #Constant ambient temperature
-        qsets = np.zeros(N) #Preallocate space
-        for i in range(N):
-            Tinf_set = Tinfs[0:i+1]           
-            G.Tinf_array = Tinf_set
-            coreTemp_list[i] = G.greensStep(x=0)
-            periphTemp_list[i] = G.greensStep(x=G.L)
-            pid = PID.PID(P=35000, I=1, D=10)
-            pid.SetPoint = 37
-            pid.setSampleTime(dt)
+    elif j == 1:
+        # All parms unity with an oscillating generation
+        N = 80
+        dt = 1
+        times = np.linspace(0, N*dt, N)
+        Tinf = np.zeros( N )
+        qgen = 1 - np.cos( times/4 )
+        L = 1
+        G = SteppingClass( 1, L, 1, 1 )
+
+    elif j == 2:
+        # All parms unity and qgen = 0. Steady-state solution should be
+        # T_surf = T_core = 1.  Convergence reached at Nm = 40
+        N = 20
+        dt = 1
+        Tinf = np.ones( N )
+        qgen = np.zeros( N )
+        L = 1
+        G = SteppingClass( 1, L, 1, 1 )
+
+    elif j == 3:
+        # Human params.  qgen = 5600 W/m. Too = 10
+        N = 500
+        dt = 60
+        Tinf = 10 * np.ones( N )
+        qgen = 5600 * np.ones( N )
+        L = 0.035
+        G = SteppingClass( 25, L, 0.613, 0.146e-6 )
+       
+
+    coreTemp = np.zeros( N )
+    surfTemp = np.zeros( N )
+
+    for i in range( 1, N ):
+        coreTemp[i] = G.greensStep( 0, dt, Tinf[:i], qgen[:i] )
+        surfTemp[i] = G.greensStep( L, dt, Tinf[:i], qgen[:i] )
+
+    print( coreTemp[-1], surfTemp[-1] )
+
+    return qgen, Tinf, coreTemp, surfTemp
+
+    
+def makeData():
+    qv = 0 # Initial qgen
+    tinfv = 0 # Initial Too
+    L = 0.035
+        
+    G = SteppingClass( 25, L, 0.613, 0.146e-6 )
+    dt = 60
+    N = 180
+    
+    coreTemp_list = np.zeros(N) #Preallocate space
+    surfTemp_list = np.zeros(N) #Preallocate space
+        
+    Tinfs = np.ones(N)*tinfv #Constant ambient temperature
+    qsets = np.zeros(N) #Preallocate space
+
+    for i in range(N):
+           
+        coreTemp_list[i] = G.greensStep( 0, dt, Tinfs[:i], qsets[:i] )
+        surfTemp_list[i] = G.greensStep( L, dt, Tinfs[:i], qsets[:i] )
+            
+        pid = PID.PID(P=35000, I=1, D=10)
+        pid.SetPoint = 37
+        pid.setSampleTime(dt)
 #            if i > 25:
-            qset = pid.update(coreTemp_list[i])
+        qset = pid.update(coreTemp_list[i])
 #            else:
 #                qset = 4000000 #pid.update(coreTemp_list[i])
-            qsets[i] = qset
-            G.q_array = qsets[0:i+1]
-            G.t += t_initial
-        return Tinf_set, coreTemp_list, periphTemp_list, qsets
+        qsets[i] = qset
+            
+    return qsets, Tinfs, coreTemp_list, surfTemp_list
+
+if __name__ == '__main__':
+    
     r = makeData()
+#    r = testSteppingClass( 3 )
 
     plt.figure(0)
-    plt.plot(r[1],label='Core Temp')
-#    plt.plot(r[2],label='Peripheral Temp')
+    plt.plot(r[2],label='Core Temp')
+    plt.plot(r[3],label='Surf Temp')
     plt.legend()
     plt.figure(1)
-    plt.plot(r[3],label='q values')
+    plt.plot(r[0],label='q values')
     plt.legend()
     plt.show()
 
