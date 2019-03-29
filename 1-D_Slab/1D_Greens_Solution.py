@@ -68,10 +68,10 @@ class SteppingClass:
             for i in range(n_timesteps): #inner sums
                 termA = 1/(bm**2*alpha)*np.exp(-bm**2 * alpha/L*(t-t2)) #first term in first sum
                 termB = 1/(bm**2*alpha)*np.exp(-bm**2 * alpha/L*(t-t1)) #second term in first sum
-                sum1 += (termA - termB)
+                sum1 += (termA - termB)*q_array[i]
                 t1 += dt
                 t2 += dt
-            term1 += 2*alpha*L**2/(K*bm)*((bm**2+b2**2)/(bm**2+b2**2+b2))*np.cos(bm*x/L)*np.sin(bm)*sum1*q_array[i] #This should be M not i, I think
+            term1 += 2*alpha*L**2/(K*bm)*((bm**2+b2**2)/(bm**2+b2**2+b2))*np.cos(bm*x/L)*np.sin(bm)*sum1 #This should be M not i, I think
             term2 += 2*alpha*L/(1)*((bm**2+b2**2)/(bm**2+b2**2+b2))*np.cos(bm*x/L)*np.cos(bm)*sum1*Tinf_array[i]*h/K
         return (term1+term2)
         
@@ -112,4 +112,5 @@ if __name__ == '__main__':
     plt.figure(1)
     plt.plot(r[3],label='q values')
     plt.legend()
+    plt.show()
 
