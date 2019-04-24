@@ -10,13 +10,13 @@ class SteppingClass:
     '''Class that takes discrete steps with Tinf and q arrays 
     and calculates temperature at a given x'''
     #def __init__(self,t,Tinf_array,q_array,L=0.02):
-    def __init__( self, h, L, k, alpha ):
+    def __init__( self, h, L, k, alpha ): #initialize class input values
         self.h = h
         self.L = L
         self.k = k
         self.alpha = alpha
         
-    def eigenvalue(self, M, Bi ): #fix this
+    def eigenvalue(self, M, Bi ): #M is number of Eigenvalues
         b = np.zeros( M )
         tol = 1e-9
         for m in range( M ): #b[0]=np.min part...then to get 
@@ -32,17 +32,15 @@ class SteppingClass:
                 b[m] -= err
         return b
 
-    def greensStep( self, x, dt, Tinf_array, q_array ):
-        #Tinf_array = self.Tinf_array
-        #q_array = self.q_array
-        
+    def greensStep( self, x, dt, Tinf_array, q_array ): 
+        #length of Tinf_array and q_array is the number of timesteps
         h = self.h
         k = self.k
         alpha = self.alpha
         L = self.L #length of slab
         
         b2 = h*L/k #Biot Number
-        n_iterations = 4
+        n_iterations = 20 #Need about 40 for full convergence, going low can mess up the ANN
         term1 = 0
         term2 = 0
         n_timesteps = len(q_array)
@@ -70,7 +68,8 @@ class SteppingClass:
             
         return (term1+term2)
 
-
+#%%
+'''
 def testSteppingClass( j ):
 
     if j == 0:
@@ -124,7 +123,7 @@ def testSteppingClass( j ):
     print( coreTemp[-1], surfTemp[-1] )
 
     return qgen, Tinf, coreTemp, surfTemp   
-
+'''
     
 def makeData():
     qv = 0 # Initial qgen
@@ -142,13 +141,21 @@ def makeData():
     qsets = np.zeros(N) #Preallocate space
     
     for i in range(N):
-        amp = 5
+        amp = 12
         if i >= 75:
-            Tinfs[i] = amp*np.sin((i-75)/(N-75)*11*np.pi-np.pi) + tinfv + amp #sine wave that stays above 0
-        coreTemp_list[i] = G.greensStep( 0, dt, Tinfs[:i], qsets[:i] )
-        surfTemp_list[i] = G.greensStep( L, dt, Tinfs[:i], qsets[:i] )
+            j = (i-75)/(N-75)
+            if i <= 150:
+                Tinfs[i] = amp*np.exp(-2*j)*np.sin(2*20*np.pi*j**2) + tinfv + (i - 75)/10 #Best training data so far
+            else:
+                Tinfs[i] = Tinfs[i-1] - 0.05
+        
+        coreTemp_list[i] = G.greensStep( 0, dt, Tinfs[:i], qsets[:i] ) #Get temp at core
+        surfTemp_list[i] = G.greensStep( L, dt, Tinfs[:i], qsets[:i] ) #Get temp at skin
             
-        pid = PID.PID(P=35000, I=1, D=10)
+        pid = PID.PID(P=35000, I=1, D=10) 
+    '''#These values can be adjusted, but if they are, 
+    the values hardcoded in later on to get temperature 
+    to 37* need to be adjusted'''
         pid.SetPoint = 37
         pid.setSampleTime(dt)
 #            if i > 25:
@@ -178,7 +185,7 @@ def makeNewData():
     for i in range(N):
         amp = 5
         if i >= 75:
-            Tinfs[i] = 1.5*amp*np.sin((i-75)/(N-75)*4*np.pi) + tinfv + amp*1.5 #sine wave that stays above 0
+            Tinfs[i] = amp*np.sin((i-75)/(N-75)*4*np.pi) + tinfv + amp #simple sine wave for testing
         coreTemp_list[i] = G.greensStep( 0, dt, Tinfs[:i], qsets[:i] )
         surfTemp_list[i] = G.greensStep( L, dt, Tinfs[:i], qsets[:i] )
             
@@ -318,7 +325,7 @@ if __name__ == '__main__':
     plt.legend()
     
     plt.figure(3)
-    plt.title('Generation Values from Testing with Training')
+    plt.title('Generation Values from Testing with New Data')
     plt.plot(ndata[0][10:],label='q values (PID)')
     plt.plot(yhat_test,label='yhat (SKL)')
     plt.xlabel('Time (minutes)')
