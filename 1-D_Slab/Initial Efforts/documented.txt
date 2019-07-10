@@ -1,0 +1,2 @@
+#This folder documents the initial efforts for the neural network controlled temperature regulation of a 1D slab. 
+#Work in this folder is primarily from Patrick Mudge with some input from Greg Walker, John Liptack, and Becca Creed.
