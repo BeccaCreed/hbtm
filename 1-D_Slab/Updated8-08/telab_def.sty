@@ -1,0 +1,47 @@
+\RequirePackage{amsmath}
+
+% scientific notations
+\newcommand{\unit}[1]{\ensuremath{\,{\mathrm{#1}}}}
+\newcommand{\unith}[1]{\ensuremath{\text{-}{\mathrm{#1}}}}
+\newcommand{\degC}{\ensuremath{^\circ{\mathrm C}}}
+\newcommand{\degF}{\ensuremath{^\circ{\mathrm F}}}
+\newcommand{\degK}{\unit{K}}
+\newcommand{\etothe}[1]{\times 10^{#1}}
+
+% special functions
+\newcommand{\sn}{{\rm sn}}
+\newcommand{\real}{{\rm Re}}
+\newcommand{\imag}{{\rm Im}}
+\newcommand{\Ei}{{\rm E}}
+\DeclareMathOperator{\erfc}{erfc}
+\DeclareMathOperator{\erf}{erf}
+\DeclareMathOperator{\ierfc}{ierfc}
+
+% non-dimensional numbers
+\renewcommand{\Pr}{{\rm Pr}}
+\newcommand{\St}{{\rm St}}
+\newcommand{\Nu}{{\rm Nu}}
+\newcommand{\Ra}{{\rm Ra}}
+\renewcommand{\Re}{{\rm Re}}
+\newcommand{\Kn}{{\rm Kn}}
+\newcommand{\Sc}{{\rm Sc}}
+\newcommand{\Fo}{{\rm Fo}}
+\newcommand{\Bi}{{\rm Bi}}
+
+% Alter some LaTeX defaults for better treatment of figures:
+% See p.105 of "TeX Unbound" for suggested values.
+% See pp. 199-200 of Lamport's "LaTeX" book for details.
+% General parameters, for ALL pages:
+\renewcommand{\topfraction}{0.9}	% max fraction of floats at top
+\renewcommand{\bottomfraction}{0.8}	% max fraction of floats at bottom
+% Parameters for TEXT pages (not float pages):
+\setcounter{topnumber}{2}
+\setcounter{bottomnumber}{2}
+\setcounter{totalnumber}{4}     % 2 may work better
+\setcounter{dbltopnumber}{2}    % for 2-column pages
+\renewcommand{\dbltopfraction}{0.9}	% fit big float above 2-col. text
+\renewcommand{\textfraction}{0.07}	% allow minimal text w. figs
+% Parameters for FLOAT pages (not text pages):
+\renewcommand{\floatpagefraction}{0.7}	% require fuller float pages
+% N.B.: floatpagefraction MUST be less than topfraction !!
+\renewcommand{\dblfloatpagefraction}{0.7}	% require fuller float pages
