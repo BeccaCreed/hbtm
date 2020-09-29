@@ -137,16 +137,73 @@ def testSteppingClass( j ):
     return qgen, Tinf, coreTemp, surfTemp   
 '''
 
+# N: Number of time steps
+# tInit: initial temperature value
+def makeESinTinf(N = 180, tInit = 0):
+    tInf = np.ones(N) * tInit  # Constant ambient temperature
+
+    for i in range(N):
+        amp = .5    #amplitude of sin wave
+        if i >= 75:
+            j = (i - 75) / (N - 75)
+            if i <= 150:
+                tInf[i] = amp * np.exp(-2 * j) * np.sin(2 * 20 * np.pi * j ** 2) + tInit + (
+                            i - 75) / 150  # Best training data so far
+            else:
+                tInf[i] = tInf[i - 1] - 0.005
+
+    return tInf
+
+# N: Number of time steps
+# tInit: initial temperature value
+def makeSinTinf(N = 180, tInit = 0):
+    tInf = np.ones(N) * tInit  # Constant ambient temperature
+
+    for i in range(N):
+        amp = .25
+        if i >= 75:
+            tInf[i] = amp * np.sin((i - 75) / (N - 75) * 4 * np.pi) + tInit + amp  # simple sine wave for testing
+
+    return tInf
+
+
 # makeData
 # Uses PID to create training data
 # Uses a sine wave that varies in frequency, amplitude, and mean
-def makeData():
+def makeData(tInf,pid,model, N = 180):
+    dt = 60 #timestamp
+
+    coreTemp_list = np.zeros(N)  # Preallocate space
+    surfTemp_list = np.zeros(N)  # Preallocate space
+    qsets = np.zeros(N)  # Preallocate space
+
+    # These numbers come from PIDStripChart
+    #Bi = 1.4
+    #Fo = .01
+
+    # New Model and New PID, with inital qset values based on a PID value of 0
+    # These declarations are the same as the ones in PIDStripChart
+    #model = fc.X23_gToo_I(Bi, Fo, M=100)
+    #pid = PID.PID(100.0, 10.0, 0.0, setpoint=37.0)
+    pid.setSampleTime(dt)
+    qset = pid.update(0.0)
+
+    for i in range(N):
+        qsets[i] = qset
+        coreTemp_list[i], surfTemp_list[i] = model.getNextTemp(qset, tInf[i])
+        qset = pid.update(coreTemp_list[i])
+
+    return qsets, tInf, coreTemp_list, surfTemp_list
+
+# makeData()
+# create testing Tinf data, but also uses a PID to verify results of ANN against how PID would have performed
+'''def makeData():
     qv = 0  # Initial qgen
     tinfv = 0  # Initial Too
-    L = 0.035   # thickness
+    L = 0.035
 
     G = SteppingClass(25, L, 0.613, 0.146e-6)
-    dt = 60 #timestamp
+    dt = 60
     N = 180
 
     coreTemp_list = np.zeros(N)  # Preallocate space
@@ -155,57 +212,54 @@ def makeData():
     Tinfs = np.ones(N) * tinfv  # Constant ambient temperature
     qsets = np.zeros(N)  # Preallocate space
 
-    # These numbers come from PIDStripChart
+    # New Model and New PID, with inital qset values based on a PID value of 0
+    # These declarations are the same as the ones in PIDStripChart
     Bi = 1.4
     Fo = .01
 
-    # New Model and New PID, with inital qset values based on a PID value of 0
-    # These declarations are the same as the ones in PIDStripChart
-    model = fc.X23_gToo_I(Bi, Fo, M=100)
     pid = PID.PID(0.5 / Fo, 0.8 / Fo, 0.0, setpoint=37.0)
+
     pid.setSampleTime(dt)
     qset = pid.update(0.0)
+
+    model = fc.X23_gToo_I(Bi, Fo, M=100)
 
     # Set pid in the PID controller with the parameters in PIDparms.yaml
     # Although the PID is declared with certain values, this overwrites them
     with open("PIDparms.yaml", "r") as fobj:
-        parms = yaml.load( fobj )
+        parms = yaml.load(fobj)
         pid.setKp(parms["Kp"])
         pid.setKi(parms["Ki"])
         pid.setKd(parms["Kd"])
         pid.printInputs()
 
-    # Old PID
-    '''pid = PID.PID(P=35000, I=1, D=10)
-    pid.SetPoint = 37
-    pid.setSampleTime(dt)'''
+    
 
     for i in range(N):
-        amp = 12    #amplitude of sin wave
+        amp = 12  # amplitude of sin wave
         if i >= 75:
             j = (i - 75) / (N - 75)
             if i <= 150:
                 Tinfs[i] = amp * np.exp(-2 * j) * np.sin(2 * 20 * np.pi * j ** 2) + tinfv + (
-                            i - 75) / 10  # Best training data so far
+                        i - 75) / 10  # Best training data so far
             else:
                 Tinfs[i] = Tinfs[i - 1] - 0.05
 
         # Old Model
-        #coreTemp_list[i] = G.greensStep(0, dt, Tinfs[:i], qsets[:i])  # Get temp at core
-        #surfTemp_list[i] = G.greensStep(L, dt, Tinfs[:i], qsets[:i])  # Get temp at skin
+        #coreTemp_list[i] = G.greensStep(0, dt, Tinfs[:i], qsets[:i])
+        #surfTemp_list[i] = G.greensStep(L, dt, Tinfs[:i], qsets[:i])
 
+        qsets[i] = qset
         # New Model
         coreTemp_list[i], surfTemp_list[i] = model.getNextTemp(qset, Tinfs[i])
-
 
         #            if i > 25:
         qset = pid.update(coreTemp_list[i])
         #            else:
         #                qset = 4000000 #pid.update(coreTemp_list[i])
-        qsets[i] = qset
 
 
-    return qsets, Tinfs, coreTemp_list, surfTemp_list
+    return qsets, Tinfs, coreTemp_list, surfTemp_list'''
 
 # makeNewData()
 # create testing Tinf data, but also uses a PID to verify results of ANN against how PID would have performed
@@ -230,6 +284,7 @@ def makeNewData():
     Fo = .01
 
     pid = PID.PID(0.5 / Fo, 0.8 / Fo, 0.0, setpoint=37.0)
+
     pid.setSampleTime(dt)
     qset = pid.update(0.0)
 
@@ -258,6 +313,7 @@ def makeNewData():
         #coreTemp_list[i] = G.greensStep(0, dt, Tinfs[:i], qsets[:i])
         #surfTemp_list[i] = G.greensStep(L, dt, Tinfs[:i], qsets[:i])
 
+        qsets[i] = qset
         # New Model
         coreTemp_list[i], surfTemp_list[i] = model.getNextTemp(qset, Tinfs[i])
 
@@ -265,13 +321,14 @@ def makeNewData():
         qset = pid.update(coreTemp_list[i])
         #            else:
         #                qset = 4000000 #pid.update(coreTemp_list[i])
-        qsets[i] = qset
+
 
     return qsets, Tinfs, coreTemp_list, surfTemp_list
 
 # SKlearn
 # uses makeDelT function to create matrix to train ANN with current and previous temperature
 class SKlearn:
+
     def makeDelT(self, T, Q):
         N = T.shape[0] - 1
         Tdeld = np.zeros((N, 2))
@@ -311,6 +368,18 @@ class SKlearn:
 
         '''This begins the testing part.  This could be put into separate 
         functions in the future'''
+        T1, Q1, Tinf1 = np.loadtxt('1DGS_surfT_test.dat')
+        T2chop = T1
+        Q2chop = Q1
+
+        scaler = skl.StandardScaler(copy=False)
+        scaler.fit(T2chop.reshape(-1, 1))
+        scaler.transform(T2chop.reshape(-1, 1))
+        T_test, Q_test = self.makeDelT(T2chop, Q2chop)
+        yhat_test = mlp.predict(T_test)
+        return yhat_train, yhat_test
+
+    def Test(self):
         T1, Q1, Tinf1 = np.loadtxt('1DGS_surfT_test.dat')
         T2chop = T1
         Q2chop = Q1
@@ -366,10 +435,26 @@ class greensFromSKL:
 
 
 if __name__ == '__main__':
-    r = makeData()  # Make the training data using PID controller (All termperatures and q)
-    np.savetxt('1DGS_surfT_train.dat', (r[3], r[0], r[1]))  # Save the training data
-    ndata = makeNewData()  # Make the testing data using PID controller (All termperatures and q)
-    np.savetxt('1DGS_surfT_test.dat', (ndata[3], ndata[0], ndata[1]))  # Save the testing data
+    Bi = 1.4
+    Fo = .01
+    N = 180
+
+    # Create model to solve Greens, and the PID controller
+    trainModel = fc.X23_gToo_I(Bi, Fo, M=100)
+    testModel = fc.X23_gToo_I(Bi, Fo, M=100)
+    pid = PID.PID(100.0, 10.0, 0.0, setpoint=1.0)
+
+    # Generate Too values for testing and training
+    tInfTrain = makeESinTinf(N,0)
+    tInfTest = makeSinTinf(N,0)
+
+    # Calculate core/surface temp and q values for the PID
+    r = makeData(tInfTrain,pid,trainModel,N)  # Make the training data using PID controller (All termperatures and q)
+    np.savetxt('1DGS_surfT_train.dat', (r[2], r[0], tInfTrain))  # Save the training data
+
+    ndata = makeData(tInfTest,pid,testModel,N)  # Make the testing data using PID controller (All termperatures and q)
+    np.savetxt('1DGS_surfT_test.dat', (ndata[2], ndata[0], tInfTest))  # Save the testing data
+
     SKL = SKlearn()
     yhat_train, yhat_test = SKL.trainAndTest()  # This trains and tests the ANN
     GSK = greensFromSKL()  # Get temperature values from ANN output
@@ -388,7 +473,7 @@ if __name__ == '__main__':
 
     plt.figure(1)
     plt.title('Generation Values from Testing with Training')
-    plt.plot(r[0][10:], label='q values (PID)')
+    plt.plot(r[0], label='q values (PID)')
     plt.plot(yhat_train, label='yhat (SKL)')
     plt.legend()
     plt.xlabel('Time (minutes)')
@@ -405,7 +490,7 @@ if __name__ == '__main__':
 
     plt.figure(3)
     plt.title('Generation Values from Testing with New Data')
-    plt.plot(ndata[0][10:], label='q values (PID)')
+    plt.plot(ndata[0], label='q values (PID)')
     plt.plot(yhat_test, label='yhat (SKL)')
     plt.xlabel('Time (minutes)')
     plt.legend()

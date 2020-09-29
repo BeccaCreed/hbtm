@@ -65,18 +65,18 @@ class PIDStripChart():
             sig = np.sin(np.pi/2 + 2 * np.pi * t)
             Too = 0.5*(1 - signal.square(2 * np.pi * 30 * t, duty=(sig + 1)/2))
         else:
-            freq = math.pi / 20
+            freq = math.pi / 30
             offset = -20
-            mag = 5     #try for large and small values
+            mag = 40     #try for large and small values
             
             # constant
             #Too = 0
         
             # cos wave
-            Too = 0.5*(1 - math.cos(i*freq))
+            #Too = 0.5*(1 - math.cos(i*freq))
 
             # square wave
-            #Too = 0.5*(1 - signal.square( i*freq ))
+            Too = 0.5*(1 - signal.square( i*freq ))
 
             # triangle wave
             #Too = signal.sawtooth( i*freq, 0.5 )

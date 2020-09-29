@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from random import randint
 import time
 import numpy as np
-from scipy.interpolate import spline
+"from scipy.interpolate import spline"
 import csv
 
 class PID:
