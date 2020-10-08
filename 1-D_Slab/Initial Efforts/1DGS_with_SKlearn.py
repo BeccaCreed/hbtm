@@ -3,11 +3,14 @@ import matplotlib.pyplot as plt
 #import PID as PID
 import sklearn.preprocessing as skl
 import sklearn.neural_network as NN
+from sklearn.metrics import mean_squared_error
+from math import sqrt
 from sklearn.model_selection import train_test_split
 
 # new conduction solution and PID
 import forwardconduction  as fc
 import PIDivmech as PID
+from scipy import signal
 
 # Old PID Import
 #import PID as PID
@@ -166,6 +169,55 @@ def makeSinTinf(N = 180, tInit = 0):
 
     return tInf
 
+# N: Number of time steps
+# tInit: initial temperature value
+def makeHighSinTinf(N = 180, tInit = 0):
+    tInf = np.ones(N) * tInit  # Constant ambient temperature
+
+    for i in range(N):
+        amp = .25
+        if i >= 75:
+            tInf[i] = amp * np.sin((i - 75) / (N - 75) * 6 * np.pi) + tInit + amp  # simple sine wave for testing
+
+    return tInf
+
+# N: Number of time steps
+# tInit: initial temperature value
+def makeSquareSinTinf(N = 180, tInit = 0):
+    tInf = np.ones(N) * tInit  # Constant ambient temperature
+    freq = 2 * np.pi
+
+    for i in range(N):
+        amp = .25
+        if i >= 75:
+            tInf[i] = amp *(1 - signal.square( (i - 75) / (N - 75) * 4 * np.pi ))
+
+    return tInf
+
+# N: Number of time steps
+# tInit: initial temperature value
+def makeTriangleSinTinf(N = 180, tInit = 0):
+    tInf = np.ones(N) * tInit  # Constant ambient temperature
+    freq = 2 * np.pi
+
+    for i in range(N):
+        amp = .25
+        if i >= 75:
+            tInf[i] = amp *(1-signal.sawtooth( (i - 75) / (N - 75) * 4 * np.pi ))
+
+    return tInf
+
+# N: Number of time steps
+# tInit: initial temperature value
+def makeRampTinf(N = 180, tInit = 0):
+    tInf = np.ones(N) * tInit  # Constant ambient temperature
+    freq = 2 * np.pi
+
+    for i in range(N):
+        if i >= 75:
+            tInf[i] = -1/4*((i - 75)/(N - 75)) +.5
+
+    return tInf
 
 # makeData
 # Uses PID to create training data
@@ -404,7 +456,7 @@ class greensFromSKL:
         #    T2, Q2 = np.loadtxt('1dgs_surfT_test_chopped.dat')
         G = SteppingClass(25, L, 0.613, 0.146e-6)
         dt = 60
-        N = 180
+        N = 200
 
         coreTemp_list = np.zeros(N - 1)  # Preallocate space
         surfTemp_list = np.zeros(N - 1)  # Preallocate space
@@ -437,31 +489,187 @@ class greensFromSKL:
 if __name__ == '__main__':
     Bi = 1.4
     Fo = .01
-    N = 180
 
+    # Also have to change N in greensFromSkl around line 450
+    N = 200
+
+    # makeSinTinf,makeHighSinTinf,makeESinTinf,makeRampTinf,makeSquareSinTinf,makeTriangleSinTinf
+    # train with square and ESin
+    trainFunctions = [makeSinTinf]
+    testFunctions = [ makeHighSinTinf]
+    
     # Create model to solve Greens, and the PID controller
-    trainModel = fc.X23_gToo_I(Bi, Fo, M=100)
-    testModel = fc.X23_gToo_I(Bi, Fo, M=100)
+    #trainModel = fc.X23_gToo_I(Bi, Fo, M=100)
+    #testModel = fc.X23_gToo_I(Bi, Fo, M=100)
     pid = PID.PID(100.0, 10.0, 0.0, setpoint=1.0)
 
     # Generate Too values for testing and training
-    tInfTrain = makeESinTinf(N,0)
-    tInfTest = makeSinTinf(N,0)
+    #tInfTrain = makeESinTinf(N,0)
+    #tInfTest = makeHighSinTinf(N,0)
+    tInfTrain = {}
+    tInfTest = {}
 
-    # Calculate core/surface temp and q values for the PID
-    r = makeData(tInfTrain,pid,trainModel,N)  # Make the training data using PID controller (All termperatures and q)
-    np.savetxt('1DGS_surfT_train.dat', (r[2], r[0], tInfTrain))  # Save the training data
+    rmsTrainTCoreVals = {}
+    rmsTrainQVals = {}
+    rmsTestTCoreVals = {}
+    rmsTestQVals = {}
 
-    ndata = makeData(tInfTest,pid,testModel,N)  # Make the testing data using PID controller (All termperatures and q)
-    np.savetxt('1DGS_surfT_test.dat', (ndata[2], ndata[0], tInfTest))  # Save the testing data
+    for func in trainFunctions:
+        tInfTrain[func.__name__] = (func(N,0))
 
-    SKL = SKlearn()
+    for func in testFunctions:
+        tInfTest[func.__name__] = (func(N,0))
+
+    for train in tInfTrain:
+        print("Training with " + train)
+
+        # Calculate core/surface temp and q values for the PID
+        trainModel = fc.X23_gToo_I(Bi, Fo, M=100)
+        r = makeData(tInfTrain[train],pid,trainModel,N)  # Make the training data using PID controller (All termperatures and q)
+        np.savetxt('1DGS_surfT_train.dat', (r[2], r[0], tInfTrain[train]))  # Save the training data
+
+        for test in tInfTest:
+            print("Testing: " + test)
+            testModel = fc.X23_gToo_I(Bi, Fo, M=100)
+            ndata = makeData(tInfTest[test],pid,testModel,N)  # Make the testing data using PID controller (All termperatures and q)
+            np.savetxt('1DGS_surfT_test.dat', (ndata[2], ndata[0], tInfTest[test]))  # Save the testing data
+            SKL = SKlearn()
+            yhat_train, yhat_test = SKL.trainAndTest()  # This trains and tests the ANN
+
+            GSK = greensFromSKL()  # Get temperature values from ANN output
+            gskTrainData = GSK.makeData(yhat_train, r[1])  # Temp from Training
+            gskTestData = GSK.makeData(yhat_test, ndata[1])  # Temp from Testing
+
+            rmsTrainTCore = sqrt(mean_squared_error(r[2][1:], gskTrainData[2]))
+            rmsTrainQ = sqrt(mean_squared_error(r[0][11:], yhat_train[10:]))
+
+            rmsTestTCore = sqrt(mean_squared_error(ndata[2][1:], gskTestData[2]))
+            rmsTestQ = sqrt(mean_squared_error(ndata[0][11:], yhat_test[10:]))
+
+            key = 'Train-' + train + ' Test-' + test
+            filePath = './plots/' + train + test + '.png'
+            dataPath = './data/'
+
+            rmsTrainTCoreVals[key] = rmsTrainTCore
+            rmsTrainQVals[key] = rmsTrainQ
+            rmsTestTCoreVals[key] = rmsTestTCore
+            rmsTestQVals[key] = rmsTestQ
+
+            fig, axs = plt.subplots(2, 2)
+            fig.set_size_inches(18.5, 10.5)
+            fig.suptitle(key)
+            axs[0, 0].plot(r[2], label='PID Core Temp')
+            axs[0, 0].plot(r[3], label='PID Surf Temp')
+            axs[0, 0].set_title('Train Temperatures')
+            axs[0, 0].plot(gskTrainData[2], label='SKL Core Temp')
+            axs[0, 0].plot(gskTrainData[3], label='SKL Surface Temp')
+            axs[0, 0].plot(r[1], label='Too')
+            axs[0, 0].set(xlabel='Time (minutes)', ylabel='Temperature (C)')
+            axs[0, 0].text(0, .2, "RMS TCore " + "{:.3f}".format(rmsTrainTCore))
+            axs[0, 0].legend(loc=4)
+
+            axs[1, 0].set_title('Generation Values from Testing with Training')
+            axs[1, 0].plot(r[0], label='q values (PID)')
+            axs[1, 0].plot(yhat_train, label='yhat (SKL)')
+            axs[1, 0].legend(loc=1)
+            axs[1, 0].text(10, 20, "RMS Q " + "{:.3f}".format(rmsTrainQ))
+            axs[1, 0].set(xlabel='Time (minutes)', ylabel='Generation (W)')
+
+            axs[0, 1].plot(ndata[2], label='PID Core Temp')
+            axs[0, 1].plot(ndata[3], label='PID Surf Temp')
+            axs[0, 1].set_title('Test Temperatures')
+            axs[0, 1].plot(gskTestData[2], label='SKL Core Temp')
+            axs[0, 1].plot(gskTestData[3], label='SKL Surface Temp')
+            axs[0, 1].plot(ndata[1], label='Too')
+            axs[0, 1].set(xlabel='Time (minutes)', ylabel='Temperature (C)')
+            axs[0, 1].text(.0, .2, "RMS TCore " + "{:.3f}".format(rmsTestTCore))
+            axs[0, 1].legend(loc=4)
+
+            axs[1, 1].set_title('Generation Values from Testing with New Data')
+            axs[1, 1].plot(ndata[0], label='q values (PID)')
+            axs[1, 1].plot(yhat_test, label='yhat (SKL)')
+            axs[1, 1].legend(loc=1)
+            axs[1, 1].text(10, 20, "RMS Q " + "{:.3f}".format(rmsTestQ))
+            axs[1, 1].set(xlabel='Time (minutes)', ylabel='Generation (W)')
+            plt.tight_layout()
+            plt.savefig(filePath, pad_inches = .3)
+
+    f1 = open(dataPath + 'rmsTrainTCore.txt', 'w')
+    f2 = open(dataPath + 'rmsTrainQ.txt', 'w')
+    f3 = open(dataPath + 'rmsTestTCore.txt', 'w')
+    f4 = open(dataPath + 'rmsTestQ.txt', 'w')
+    f1.write(str(rmsTrainTCoreVals))
+    f2.write(str(rmsTrainQVals))
+    f3.write(str(rmsTestTCoreVals))
+    f4.write(str(rmsTestQVals))
+    f1.close()
+    f2.close()
+    f3.close()
+    f4.close()
+    plt.show()
+
+
+
+    '''SKL = SKlearn()
     yhat_train, yhat_test = SKL.trainAndTest()  # This trains and tests the ANN
     GSK = greensFromSKL()  # Get temperature values from ANN output
     gskTrainData = GSK.makeData(yhat_train, r[1])  # Temp from Training
     gskTestData = GSK.makeData(yhat_test, ndata[1])  # Temp from Testing
 
-    plt.figure(0)
+    rmsTrainTCore = sqrt(mean_squared_error(r[2][1:],gskTrainData[2]))
+    rmsTrainQ = sqrt(mean_squared_error(r[0][11:], yhat_train[10:]))
+
+    rmsTestTCore = sqrt(mean_squared_error(ndata[2][1:], gskTestData[2]))
+    rmsTestQ = sqrt(mean_squared_error(ndata[0][11:], yhat_test[10:]))
+
+    fig, axs = plt.subplots(2, 2)
+    axs[0, 0].plot(r[2], label='PID Core Temp')
+    axs[0, 0].plot(r[3], label='PID Surf Temp')
+    axs[0, 0].set_title('Train Temperatures')
+    axs[0, 0].plot(gskTrainData[2], label='SKL Core Temp')
+    axs[0, 0].plot(gskTrainData[3], label='SKL Surface Temp')
+    axs[0, 0].plot(r[1], label='Too')
+    axs[0, 0].set(xlabel='Time (minutes)', ylabel='y-label')
+    axs[0, 0].text(0, .2, "RMS TCore " + "{:.3f}".format(rmsTrainTCore))
+    axs[0, 0].legend()
+
+    axs[1, 0].set_title('Generation Values from Testing with Training')
+    axs[1, 0].plot(r[0], label='q values (PID)')
+    axs[1, 0].plot(yhat_train, label='yhat (SKL)')
+    axs[1, 0].legend()
+    axs[1, 0].text(10, 20, "RMS Q " + "{:.3f}".format(rmsTrainQ))
+    axs[1, 0].set(xlabel='Time (minutes)', ylabel='y-label')
+
+    axs[0, 1].plot(ndata[2], label='PID Core Temp')
+    axs[0, 1].plot(ndata[3], label='PID Surf Temp')
+    axs[0, 1].set_title('Test Temperatures')
+    axs[0, 1].plot(gskTestData[2], label='SKL Core Temp')
+    axs[0, 1].plot(gskTestData[3], label='SKL Surface Temp')
+    axs[0, 1].plot(ndata[1], label='Too')
+    axs[0, 1].set(xlabel='Time (minutes)', ylabel='y-label')
+    axs[0, 1].text(.0, .2, "RMS TCore " + "{:.3f}".format(rmsTestTCore))
+    axs[0, 1].legend()
+
+    axs[1, 1].set_title('Generation Values from Testing with New Data')
+    axs[1, 1].plot(ndata[0], label='q values (PID)')
+    axs[1, 1].plot(yhat_test, label='yhat (SKL)')
+    axs[1, 1].legend()
+    axs[1, 1].text(10, 20, "RMS Q " + "{:.3f}".format(rmsTestQ))
+    axs[1, 1].set(xlabel='Time (minutes)', ylabel='y-label')
+    plt.tight_layout()
+    plt.show()'''
+
+
+
+
+    ''' axs[0, 1].plot(x, y, 'tab:orange')
+    axs[0, 1].set_title('Axis [0, 1]')
+    axs[1, 0].plot(x, -y, 'tab:green')
+    axs[1, 0].set_title('Axis [1, 0]')
+    axs[1, 1].plot(x, -y, 'tab:red')
+    axs[1, 1].set_title('Axis [1, 1]')'''
+
+    '''plt.figure(0)
     plt.title('Temperatures from Testing with Training')
     plt.plot(r[2], label='PID Core Temp')
     plt.plot(r[3], label='PID Surf Temp')
@@ -469,6 +677,7 @@ if __name__ == '__main__':
     plt.plot(gskTrainData[3], label='SKL Surface Temp')
     plt.plot(r[1], label='Too')
     plt.xlabel('Time (minutes)')
+    plt.figtext(.6,.8,"RMS " + "{:.3f}".format(rmsTrainTCore))
     plt.legend()
 
     plt.figure(1)
@@ -476,6 +685,7 @@ if __name__ == '__main__':
     plt.plot(r[0], label='q values (PID)')
     plt.plot(yhat_train, label='yhat (SKL)')
     plt.legend()
+    plt.figtext(.75, .7, "RMS " + "{:.3f}".format(rmsTrainQ))
     plt.xlabel('Time (minutes)')
 
     plt.figure(2)
@@ -486,6 +696,7 @@ if __name__ == '__main__':
     plt.plot(gskTestData[3], label='SKL Surface Temp')
     plt.plot(ndata[1], label='Too')
     plt.xlabel('Time (minutes)')
+    plt.figtext(.6, .8,"RMS " + "{:.3f}".format(rmsTestTCore))
     plt.legend()
 
     plt.figure(3)
@@ -494,4 +705,6 @@ if __name__ == '__main__':
     plt.plot(yhat_test, label='yhat (SKL)')
     plt.xlabel('Time (minutes)')
     plt.legend()
+    plt.figtext(.75, .7, "RMS " + "{:.3f}".format(rmsTestQ))
     plt.show()
+'''

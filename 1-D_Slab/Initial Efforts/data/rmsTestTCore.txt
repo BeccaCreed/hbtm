@@ -1,0 +1,1 @@
+{'Train-makeSinTinf Test-makeHighSinTinf': 0.04420585305505843}
