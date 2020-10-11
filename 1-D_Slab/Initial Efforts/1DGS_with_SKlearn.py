@@ -142,16 +142,16 @@ def testSteppingClass( j ):
 
 # N: Number of time steps
 # tInit: initial temperature value
-def makeESinTinf(N = 180, tInit = 0):
+def makeESinTinf(N = 180, tInit = 0, tStart = 75):
     tInf = np.ones(N) * tInit  # Constant ambient temperature
 
     for i in range(N):
         amp = .5    #amplitude of sin wave
-        if i >= 75:
+        if i >= tStart:
             j = (i - 75) / (N - 75)
-            if i <= 150:
+            if i <= N-50:
                 tInf[i] = amp * np.exp(-2 * j) * np.sin(2 * 20 * np.pi * j ** 2) + tInit + (
-                            i - 75) / 150  # Best training data so far
+                            i - 75) / N  # Best training data so far
             else:
                 tInf[i] = tInf[i - 1] - 0.005
 
@@ -159,62 +159,62 @@ def makeESinTinf(N = 180, tInit = 0):
 
 # N: Number of time steps
 # tInit: initial temperature value
-def makeSinTinf(N = 180, tInit = 0):
+def makeSinTinf(N = 180, tInit = 0, tStart = 75):
     tInf = np.ones(N) * tInit  # Constant ambient temperature
 
     for i in range(N):
         amp = .25
-        if i >= 75:
+        if i >= tStart:
             tInf[i] = amp * np.sin((i - 75) / (N - 75) * 4 * np.pi) + tInit + amp  # simple sine wave for testing
 
     return tInf
 
 # N: Number of time steps
 # tInit: initial temperature value
-def makeHighSinTinf(N = 180, tInit = 0):
+def makeHighSinTinf(N = 180, tInit = 0, tStart = 75):
     tInf = np.ones(N) * tInit  # Constant ambient temperature
 
     for i in range(N):
         amp = .25
-        if i >= 75:
+        if i >= tStart:
             tInf[i] = amp * np.sin((i - 75) / (N - 75) * 6 * np.pi) + tInit + amp  # simple sine wave for testing
 
     return tInf
 
 # N: Number of time steps
 # tInit: initial temperature value
-def makeSquareSinTinf(N = 180, tInit = 0):
+def makeSquareSinTinf(N = 180, tInit = 0, tStart = 75):
     tInf = np.ones(N) * tInit  # Constant ambient temperature
     freq = 2 * np.pi
 
     for i in range(N):
         amp = .25
-        if i >= 75:
+        if i >= tStart:
             tInf[i] = amp *(1 - signal.square( (i - 75) / (N - 75) * 4 * np.pi ))
 
     return tInf
 
 # N: Number of time steps
 # tInit: initial temperature value
-def makeTriangleSinTinf(N = 180, tInit = 0):
+def makeTriangleSinTinf(N = 180, tInit = 0, tStart = 75):
     tInf = np.ones(N) * tInit  # Constant ambient temperature
     freq = 2 * np.pi
 
     for i in range(N):
         amp = .25
-        if i >= 75:
+        if i >= tStart:
             tInf[i] = amp *(1-signal.sawtooth( (i - 75) / (N - 75) * 4 * np.pi ))
 
     return tInf
 
 # N: Number of time steps
 # tInit: initial temperature value
-def makeRampTinf(N = 180, tInit = 0):
+def makeRampTinf(N = 180, tInit = 0, tStart = 75):
     tInf = np.ones(N) * tInit  # Constant ambient temperature
     freq = 2 * np.pi
 
     for i in range(N):
-        if i >= 75:
+        if i >= tStart:
             tInf[i] = -1/4*((i - 75)/(N - 75)) +.5
 
     return tInf
@@ -412,7 +412,7 @@ class SKlearn:
         T_train, Q_train = self.makeDelT(Tchop0, Qchop0)
 
         # Define and train the NN
-        mlp = NN.MLPRegressor(hidden_layer_sizes=(10), max_iter=100000)  # 2,10,1
+        mlp = NN.MLPRegressor(hidden_layer_sizes=(10), max_iter=100000, solver = 'lbfgs')  # 2,10,1
         mlp.fit(T_train, Q_train)
 
         ## Verify that the parameters actually give back the original training set
@@ -456,7 +456,7 @@ class greensFromSKL:
         #    T2, Q2 = np.loadtxt('1dgs_surfT_test_chopped.dat')
         G = SteppingClass(25, L, 0.613, 0.146e-6)
         dt = 60
-        N = 200
+        N = 300
 
         coreTemp_list = np.zeros(N - 1)  # Preallocate space
         surfTemp_list = np.zeros(N - 1)  # Preallocate space
@@ -491,12 +491,15 @@ if __name__ == '__main__':
     Fo = .01
 
     # Also have to change N in greensFromSkl around line 450
-    N = 200
+    N = 300
+
+    # Starting Timestamp for Tinf
+    tStart = 10
 
     # makeSinTinf,makeHighSinTinf,makeESinTinf,makeRampTinf,makeSquareSinTinf,makeTriangleSinTinf
     # train with square and ESin
-    trainFunctions = [makeSinTinf]
-    testFunctions = [ makeHighSinTinf]
+    trainFunctions = [makeHighSinTinf, makeSquareSinTinf,makeESinTinf]
+    testFunctions = [ makeSinTinf,makeHighSinTinf,makeESinTinf,makeRampTinf,makeSquareSinTinf,makeTriangleSinTinf]
     
     # Create model to solve Greens, and the PID controller
     #trainModel = fc.X23_gToo_I(Bi, Fo, M=100)
@@ -515,10 +518,10 @@ if __name__ == '__main__':
     rmsTestQVals = {}
 
     for func in trainFunctions:
-        tInfTrain[func.__name__] = (func(N,0))
+        tInfTrain[func.__name__] = (func(N,0,tStart))
 
     for func in testFunctions:
-        tInfTest[func.__name__] = (func(N,0))
+        tInfTest[func.__name__] = (func(N,0,tStart))
 
     for train in tInfTrain:
         print("Training with " + train)
@@ -542,12 +545,18 @@ if __name__ == '__main__':
 
             rmsTrainTCore = sqrt(mean_squared_error(r[2][1:], gskTrainData[2]))
             rmsTrainQ = sqrt(mean_squared_error(r[0][11:], yhat_train[10:]))
+            print(len(r[2]),len(gskTrainData[2]))
+            print(len(r[0]),len(yhat_train))
 
             rmsTestTCore = sqrt(mean_squared_error(ndata[2][1:], gskTestData[2]))
             rmsTestQ = sqrt(mean_squared_error(ndata[0][11:], yhat_test[10:]))
 
+            print(len(ndata[2]), len(gskTestData[2]))
+            print(len(ndata[0]),len(yhat_test))
+
+
             key = 'Train-' + train + ' Test-' + test
-            filePath = './plots/' + train + test + '.png'
+            filePath = './plots/lbfgs/' + train + test + '.png'
             dataPath = './data/'
 
             rmsTrainTCoreVals[key] = rmsTrainTCore
