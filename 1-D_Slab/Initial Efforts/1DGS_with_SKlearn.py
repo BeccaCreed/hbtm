@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-#import PID as PID
+# import PID as PID
 import sklearn.preprocessing as skl
 import sklearn.neural_network as NN
 from sklearn.metrics import mean_squared_error
@@ -13,8 +13,9 @@ import PIDivmech as PID
 from scipy import signal
 
 # Old PID Import
-#import PID as PID
+# import PID as PID
 import yaml
+import csv
 
 
 ###############################################################################
@@ -140,26 +141,28 @@ def testSteppingClass( j ):
     return qgen, Tinf, coreTemp, surfTemp   
 '''
 
+
 # N: Number of time steps
 # tInit: initial temperature value
-def makeESinTinf(N = 180, tInit = 0, tStart = 75):
+def makeESinTinf(N=180, tInit=0, tStart=75):
     tInf = np.ones(N) * tInit  # Constant ambient temperature
 
     for i in range(N):
-        amp = .5    #amplitude of sin wave
+        amp = .5  # amplitude of sin wave
         if i >= tStart:
             j = (i - 75) / (N - 75)
-            if i <= N-50:
+            if i <= N - 50:
                 tInf[i] = amp * np.exp(-2 * j) * np.sin(2 * 20 * np.pi * j ** 2) + tInit + (
-                            i - 75) / N  # Best training data so far
+                        i - 75) / N  # Best training data so far
             else:
                 tInf[i] = tInf[i - 1] - 0.005
 
     return tInf
 
+
 # N: Number of time steps
 # tInit: initial temperature value
-def makeSinTinf(N = 180, tInit = 0, tStart = 75):
+def makeSinTinf(N=180, tInit=0, tStart=75):
     tInf = np.ones(N) * tInit  # Constant ambient temperature
 
     for i in range(N):
@@ -169,9 +172,10 @@ def makeSinTinf(N = 180, tInit = 0, tStart = 75):
 
     return tInf
 
+
 # N: Number of time steps
 # tInit: initial temperature value
-def makeHighSinTinf(N = 180, tInit = 0, tStart = 75):
+def makeHighSinTinf(N=180, tInit=0, tStart=75):
     tInf = np.ones(N) * tInit  # Constant ambient temperature
 
     for i in range(N):
@@ -181,62 +185,66 @@ def makeHighSinTinf(N = 180, tInit = 0, tStart = 75):
 
     return tInf
 
+
 # N: Number of time steps
 # tInit: initial temperature value
-def makeSquareSinTinf(N = 180, tInit = 0, tStart = 75):
+def makeSquareSinTinf(N=180, tInit=0, tStart=75):
     tInf = np.ones(N) * tInit  # Constant ambient temperature
     freq = 2 * np.pi
 
     for i in range(N):
         amp = .25
         if i >= tStart:
-            tInf[i] = amp *(1 - signal.square( (i - 75) / (N - 75) * 4 * np.pi ))
+            tInf[i] = amp * (1 - signal.square((i - 75) / (N - 75) * 4 * np.pi))
 
     return tInf
 
+
 # N: Number of time steps
 # tInit: initial temperature value
-def makeTriangleSinTinf(N = 180, tInit = 0, tStart = 75):
+def makeTriangleSinTinf(N=180, tInit=0, tStart=75):
     tInf = np.ones(N) * tInit  # Constant ambient temperature
     freq = 2 * np.pi
 
     for i in range(N):
         amp = .25
         if i >= tStart:
-            tInf[i] = amp *(1-signal.sawtooth( (i - 75) / (N - 75) * 4 * np.pi ))
+            tInf[i] = amp * (1 - signal.sawtooth((i - 75) / (N - 75) * 4 * np.pi))
 
     return tInf
 
+
 # N: Number of time steps
 # tInit: initial temperature value
-def makeRampTinf(N = 180, tInit = 0, tStart = 75):
+def makeRampTinf(N=180, tInit=0, tStart=75):
     tInf = np.ones(N) * tInit  # Constant ambient temperature
     freq = 2 * np.pi
 
     for i in range(N):
         if i >= tStart:
-            tInf[i] = -1/4*((i - 75)/(N - 75)) +.5
+            tInf[i] = -1 / 4 * ((i - 75) / (N - 75)) + .5
 
     return tInf
+
 
 # makeData
 # Uses PID to create training data
 # Uses a sine wave that varies in frequency, amplitude, and mean
-def makeData(tInf,pid,model, N = 180):
-    dt = 60 #timestamp
+def makeData(tInf, pid, model, N=180):
+    dt = 60  # timestamp
 
     coreTemp_list = np.zeros(N)  # Preallocate space
     surfTemp_list = np.zeros(N)  # Preallocate space
     qsets = np.zeros(N)  # Preallocate space
 
     # These numbers come from PIDStripChart
-    #Bi = 1.4
-    #Fo = .01
+    # Bi = 1.4
+    # Fo = .01
 
     # New Model and New PID, with inital qset values based on a PID value of 0
     # These declarations are the same as the ones in PIDStripChart
-    #model = fc.X23_gToo_I(Bi, Fo, M=100)
-    #pid = PID.PID(100.0, 10.0, 0.0, setpoint=37.0)
+    # model = fc.X23_gToo_I(Bi, Fo, M=100)
+    # pid = PID.PID(100.0, 10.0, 0.0, setpoint=37.0)
     pid.setSampleTime(dt)
     qset = pid.update(0.0)
 
@@ -246,6 +254,7 @@ def makeData(tInf,pid,model, N = 180):
         qset = pid.update(coreTemp_list[i])
 
     return qsets, tInf, coreTemp_list, surfTemp_list
+
 
 # makeData()
 # create testing Tinf data, but also uses a PID to verify results of ANN against how PID would have performed
@@ -313,6 +322,7 @@ def makeData(tInf,pid,model, N = 180):
 
     return qsets, Tinfs, coreTemp_list, surfTemp_list'''
 
+
 # makeNewData()
 # create testing Tinf data, but also uses a PID to verify results of ANN against how PID would have performed
 def makeNewData():
@@ -362,8 +372,8 @@ def makeNewData():
             Tinfs[i] = amp * np.sin((i - 75) / (N - 75) * 4 * np.pi) + tinfv + amp  # simple sine wave for testing
 
         # Old Model
-        #coreTemp_list[i] = G.greensStep(0, dt, Tinfs[:i], qsets[:i])
-        #surfTemp_list[i] = G.greensStep(L, dt, Tinfs[:i], qsets[:i])
+        # coreTemp_list[i] = G.greensStep(0, dt, Tinfs[:i], qsets[:i])
+        # surfTemp_list[i] = G.greensStep(L, dt, Tinfs[:i], qsets[:i])
 
         qsets[i] = qset
         # New Model
@@ -374,8 +384,8 @@ def makeNewData():
         #            else:
         #                qset = 4000000 #pid.update(coreTemp_list[i])
 
-
     return qsets, Tinfs, coreTemp_list, surfTemp_list
+
 
 # SKlearn
 # uses makeDelT function to create matrix to train ANN with current and previous temperature
@@ -398,7 +408,6 @@ class SKlearn:
     def trainAndTest(self):
         T, Q, Tinf0 = np.loadtxt('1DGS_surfT_train.dat')
 
-
         # This is where data used to be chopped, but it no longer is
         Tchop0 = T
         Qchop0 = Q
@@ -412,7 +421,7 @@ class SKlearn:
         T_train, Q_train = self.makeDelT(Tchop0, Qchop0)
 
         # Define and train the NN
-        mlp = NN.MLPRegressor(hidden_layer_sizes=(10), max_iter=100000, solver = 'lbfgs')  # 2,10,1
+        mlp = NN.MLPRegressor(hidden_layer_sizes=(10), max_iter=100000, solver='lbfgs')  # 2,10,1
         mlp.fit(T_train, Q_train)
 
         ## Verify that the parameters actually give back the original training set
@@ -451,7 +460,7 @@ class greensFromSKL:
         L = 0.035
         #        Tinfchop, Q0chop = np.loadtxt( 'SKLearnTestWithTrain.dat' )
 
-        Q0chop = yhat   # no longer chopped here
+        Q0chop = yhat  # no longer chopped here
 
         #    T2, Q2 = np.loadtxt('1dgs_surfT_test_chopped.dat')
         G = SteppingClass(25, L, 0.613, 0.146e-6)
@@ -461,13 +470,13 @@ class greensFromSKL:
         coreTemp_list = np.zeros(N - 1)  # Preallocate space
         surfTemp_list = np.zeros(N - 1)  # Preallocate space
 
-        #qsets = np.zeros(N)  # Preallocate space
+        # qsets = np.zeros(N)  # Preallocate space
         #        This is hardcoded for the currentfirst 9 values of PID
         #        to get to 37 degrees... should be changed to variable, along with its
         #        length for every time the values are chopped at 9:]
-        #qsets[0:9] = [1295026.16666667, 647299.28262206, 323542.23219183,
+        # qsets[0:9] = [1295026.16666667, 647299.28262206, 323542.23219183,
         #              161717.44886003, 80832.74270437, 40411.63341844,
-         #             20239.53790891, 10232.9286746, 5368.72489392]
+        #             20239.53790891, 10232.9286746, 5368.72489392]
 
         qsets = Q0chop
         #        Tinfs[9:] = Tinfchop
@@ -477,8 +486,8 @@ class greensFromSKL:
         model = fc.X23_gToo_I(Bi, Fo, M=100)
         for i in range(N - 1):
             # Old Model
-            #coreTemp_list[i] = G.greensStep(0, dt, Tinfs[:i], qsets[:i])
-            #surfTemp_list[i] = G.greensStep(L, dt, Tinfs[:i], qsets[:i])
+            # coreTemp_list[i] = G.greensStep(0, dt, Tinfs[:i], qsets[:i])
+            # surfTemp_list[i] = G.greensStep(L, dt, Tinfs[:i], qsets[:i])
 
             # New Model
             coreTemp_list[i], surfTemp_list[i] = model.getNextTemp(qsets[i], Tinfs[i])
@@ -498,17 +507,17 @@ if __name__ == '__main__':
 
     # makeSinTinf,makeHighSinTinf,makeESinTinf,makeRampTinf,makeSquareSinTinf,makeTriangleSinTinf
     # train with square and ESin
-    trainFunctions = [makeHighSinTinf, makeSquareSinTinf,makeESinTinf]
-    testFunctions = [ makeSinTinf,makeHighSinTinf,makeESinTinf,makeRampTinf,makeSquareSinTinf,makeTriangleSinTinf]
-    
+    trainFunctions = [makeHighSinTinf, makeSquareSinTinf, makeESinTinf]
+    testFunctions = [makeSinTinf, makeHighSinTinf, makeESinTinf, makeRampTinf, makeSquareSinTinf, makeTriangleSinTinf]
+
     # Create model to solve Greens, and the PID controller
-    #trainModel = fc.X23_gToo_I(Bi, Fo, M=100)
-    #testModel = fc.X23_gToo_I(Bi, Fo, M=100)
+    # trainModel = fc.X23_gToo_I(Bi, Fo, M=100)
+    # testModel = fc.X23_gToo_I(Bi, Fo, M=100)
     pid = PID.PID(100.0, 10.0, 0.0, setpoint=1.0)
 
     # Generate Too values for testing and training
-    #tInfTrain = makeESinTinf(N,0)
-    #tInfTest = makeHighSinTinf(N,0)
+    # tInfTrain = makeESinTinf(N,0)
+    # tInfTest = makeHighSinTinf(N,0)
     tInfTrain = {}
     tInfTest = {}
 
@@ -518,23 +527,25 @@ if __name__ == '__main__':
     rmsTestQVals = {}
 
     for func in trainFunctions:
-        tInfTrain[func.__name__] = (func(N,0,tStart))
+        tInfTrain[func.__name__] = (func(N, 0, tStart))
 
     for func in testFunctions:
-        tInfTest[func.__name__] = (func(N,0,tStart))
+        tInfTest[func.__name__] = (func(N, 0, tStart))
 
     for train in tInfTrain:
         print("Training with " + train)
 
         # Calculate core/surface temp and q values for the PID
         trainModel = fc.X23_gToo_I(Bi, Fo, M=100)
-        r = makeData(tInfTrain[train],pid,trainModel,N)  # Make the training data using PID controller (All termperatures and q)
+        r = makeData(tInfTrain[train], pid, trainModel,
+                     N)  # Make the training data using PID controller (All termperatures and q)
         np.savetxt('1DGS_surfT_train.dat', (r[2], r[0], tInfTrain[train]))  # Save the training data
 
         for test in tInfTest:
             print("Testing: " + test)
             testModel = fc.X23_gToo_I(Bi, Fo, M=100)
-            ndata = makeData(tInfTest[test],pid,testModel,N)  # Make the testing data using PID controller (All termperatures and q)
+            ndata = makeData(tInfTest[test], pid, testModel,
+                             N)  # Make the testing data using PID controller (All termperatures and q)
             np.savetxt('1DGS_surfT_test.dat', (ndata[2], ndata[0], tInfTest[test]))  # Save the testing data
             SKL = SKlearn()
             yhat_train, yhat_test = SKL.trainAndTest()  # This trains and tests the ANN
@@ -545,19 +556,13 @@ if __name__ == '__main__':
 
             rmsTrainTCore = sqrt(mean_squared_error(r[2][1:], gskTrainData[2]))
             rmsTrainQ = sqrt(mean_squared_error(r[0][11:], yhat_train[10:]))
-            print(len(r[2]),len(gskTrainData[2]))
-            print(len(r[0]),len(yhat_train))
 
             rmsTestTCore = sqrt(mean_squared_error(ndata[2][1:], gskTestData[2]))
             rmsTestQ = sqrt(mean_squared_error(ndata[0][11:], yhat_test[10:]))
 
-            print(len(ndata[2]), len(gskTestData[2]))
-            print(len(ndata[0]),len(yhat_test))
-
-
             key = 'Train-' + train + ' Test-' + test
-            filePath = './plots/lbfgs/' + train + test + '.png'
-            dataPath = './data/'
+            filePath = './plots/lbfgs/1Layer10/' + train + test + '.png'
+            dataPath = './data/Processed Files/lbfgs-1Layer10/'
 
             rmsTrainTCoreVals[key] = rmsTrainTCore
             rmsTrainQVals[key] = rmsTrainQ
@@ -601,23 +606,29 @@ if __name__ == '__main__':
             axs[1, 1].text(10, 20, "RMS Q " + "{:.3f}".format(rmsTestQ))
             axs[1, 1].set(xlabel='Time (minutes)', ylabel='Generation (W)')
             plt.tight_layout()
-            plt.savefig(filePath, pad_inches = .3)
+            plt.savefig(filePath, pad_inches=.3)
 
-    f1 = open(dataPath + 'rmsTrainTCore.txt', 'w')
-    f2 = open(dataPath + 'rmsTrainQ.txt', 'w')
-    f3 = open(dataPath + 'rmsTestTCore.txt', 'w')
-    f4 = open(dataPath + 'rmsTestQ.txt', 'w')
-    f1.write(str(rmsTrainTCoreVals))
-    f2.write(str(rmsTrainQVals))
-    f3.write(str(rmsTestTCoreVals))
-    f4.write(str(rmsTestQVals))
-    f1.close()
-    f2.close()
-    f3.close()
-    f4.close()
+    with open(dataPath + 'rmsTrainTCore.csv', 'w', newline='') as csv_file1:
+        writer = csv.writer(csv_file1)
+        for key, value in rmsTrainTCoreVals.items():
+            writer.writerow([key, value])
+
+    with open(dataPath + 'rmsTrainQ.csv', 'w', newline='') as csv_file2:
+        writer = csv.writer(csv_file2)
+        for key, value in rmsTrainQVals.items():
+            writer.writerow([key, value])
+
+    with open(dataPath + 'rmsTestTCore.csv', 'w', newline='') as csv_file3:
+        writer = csv.writer(csv_file3)
+        for key, value in rmsTestTCoreVals.items():
+            writer.writerow([key, value])
+
+    with open(dataPath + 'rmsTestQ.csv', 'w', newline='') as csv_file4:
+        writer = csv.writer(csv_file4)
+        for key, value in rmsTestQVals.items():
+            writer.writerow([key, value])
+
     plt.show()
-
-
 
     '''SKL = SKlearn()
     yhat_train, yhat_test = SKL.trainAndTest()  # This trains and tests the ANN
@@ -667,9 +678,6 @@ if __name__ == '__main__':
     axs[1, 1].set(xlabel='Time (minutes)', ylabel='y-label')
     plt.tight_layout()
     plt.show()'''
-
-
-
 
     ''' axs[0, 1].plot(x, y, 'tab:orange')
     axs[0, 1].set_title('Axis [0, 1]')
