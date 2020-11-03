@@ -1,3 +1,5 @@
+import pickle
+
 import numpy as np
 import matplotlib.pyplot as plt
 # import PID as PID
@@ -16,6 +18,8 @@ from scipy import signal
 # import PID as PID
 import yaml
 import csv
+
+import json
 
 
 ###############################################################################
@@ -322,7 +326,6 @@ def makeData(tInf, pid, model, N=180):
 
     return qsets, Tinfs, coreTemp_list, surfTemp_list'''
 
-
 # makeNewData()
 # create testing Tinf data, but also uses a PID to verify results of ANN against how PID would have performed
 def makeNewData():
@@ -391,37 +394,35 @@ def makeNewData():
 # uses makeDelT function to create matrix to train ANN with current and previous temperature
 class SKlearn:
 
-    def makeDelT(self, T, Q):
+    def makeDelT(self, T):
         N = T.shape[0] - 1
         Tdeld = np.zeros((N, 2))
+        #Tdeld = np.zeros((N, 2))
 
         # The second column is the previous time's value
         for i in range(N):
+            #Tdeld[i, 2] = T[i]
             Tdeld[i, 1] = T[i]
             Tdeld[i, 0] = T[i + 1]
 
-        Qdeld = np.zeros(N)
-        Qdeld = Q[0:-1]
+        return Tdeld
 
-        return Tdeld, Qdeld
 
+    # Loads training data from 1DGS_surfT_train.dat, which includes TCore and QTrain from the training function
+    # Tests against the training data, and also the testing data in 1DGS_surfT_test.dat
     def trainAndTest(self):
-        T, Q, Tinf0 = np.loadtxt('1DGS_surfT_train.dat')
-
-        # This is where data used to be chopped, but it no longer is
-        Tchop0 = T
-        Qchop0 = Q
-        Tinfchop0 = Tinf0
-        #        np.savetxt('SKLearnTestWithTrain.dat',(Tinfchop0,Qchop0))
+        TTrain, QTrain = np.loadtxt('1DGS_surfT_train.dat')
 
         scaler = skl.StandardScaler(copy=False)
-        scaler.fit(Tchop0.reshape(-1, 1))
-        scaler.transform(Tchop0.reshape(-1, 1))
+        scaler.fit(TTrain.reshape(-1, 1))
+        scaler.transform(TTrain.reshape(-1, 1))
         # Do the previous time step magic
-        T_train, Q_train = self.makeDelT(Tchop0, Qchop0)
+
+        T_train = self.makeDelT(TTrain)
+        Q_train = QTrain[0:-1]
 
         # Define and train the NN
-        mlp = NN.MLPRegressor(hidden_layer_sizes=(10), max_iter=100000, solver='lbfgs')  # 2,10,1
+        mlp = NN.MLPRegressor(hidden_layer_sizes=(20), max_iter=100000, solver='lbfgs')  # 2,10,1
         mlp.fit(T_train, Q_train)
 
         ## Verify that the parameters actually give back the original training set
@@ -429,16 +430,56 @@ class SKlearn:
 
         '''This begins the testing part.  This could be put into separate 
         functions in the future'''
-        T1, Q1, Tinf1 = np.loadtxt('1DGS_surfT_test.dat')
-        T2chop = T1
-        Q2chop = Q1
+        TTest = np.loadtxt('1DGS_surfT_test.dat')
 
         scaler = skl.StandardScaler(copy=False)
-        scaler.fit(T2chop.reshape(-1, 1))
-        scaler.transform(T2chop.reshape(-1, 1))
-        T_test, Q_test = self.makeDelT(T2chop, Q2chop)
+        scaler.fit(TTest.reshape(-1, 1))
+        scaler.transform(TTest.reshape(-1, 1))
+        T_test = self.makeDelT(TTest)
         yhat_test = mlp.predict(T_test)
         return yhat_train, yhat_test
+
+    # Loads training data from 1DGS_surfT_train.dat, which includes TCore and QTrain from the training function
+    # Tests 6 times against each set in the testing data in 1DGS_surfT_test.dat
+    def trainAndTestAll(self):
+        TTrain, QTrain = np.loadtxt('1DGS_surfT_train.dat')
+
+        scaler = skl.StandardScaler(copy=False)
+        scaler.fit(TTrain.reshape(-1, 1))
+        scaler.transform(TTrain.reshape(-1, 1))
+
+        # Do the previous time step magic
+        T_train = self.makeDelT(TTrain)
+        Q_train = QTrain[0:-1]
+
+        # Define and train the NN
+        mlp = NN.MLPRegressor(hidden_layer_sizes=(10,10,10), max_iter=100000, solver='lbfgs')  # 2,10,1
+        mlp.fit(T_train, Q_train)
+
+        # Testing
+        #TTest = np.loadtxt('1DGS_surfT_test.dat')
+
+        test_file = open("1DGS_surfT_test", "rb")
+        test_file.seek(0)
+        TTest = pickle.load(test_file)
+
+        '''with open("1DGS_surfT_train.json", "r") as read_file:
+            TTest = json.load(read_file)'''
+
+        # Holds results for N runs
+        QNet = {}
+
+        for key in TTest:
+             #Scale Test Function
+             scaler = skl.StandardScaler(copy=False)
+             scaler.fit(TTest[key].reshape(-1, 1))
+             scaler.transform(TTest[key].reshape(-1, 1))
+             T_test = self.makeDelT(TTest[key])
+
+             # Test N times, store all data
+             QNet[key]= mlp.predict(T_test)
+
+        return QNet
 
     def Test(self):
         T1, Q1, Tinf1 = np.loadtxt('1DGS_surfT_test.dat')
@@ -502,13 +543,15 @@ if __name__ == '__main__':
     # Also have to change N in greensFromSkl around line 450
     N = 300
 
+    numRuns = 6
+
     # Starting Timestamp for Tinf
     tStart = 10
 
     # makeSinTinf,makeHighSinTinf,makeESinTinf,makeRampTinf,makeSquareSinTinf,makeTriangleSinTinf
     # train with square and ESin
-    trainFunctions = [makeHighSinTinf, makeSquareSinTinf, makeESinTinf]
-    testFunctions = [makeSinTinf, makeHighSinTinf, makeESinTinf, makeRampTinf, makeSquareSinTinf, makeTriangleSinTinf]
+    trainFunctions = [makeHighSinTinf,makeSquareSinTinf, makeESinTinf]
+    testFunctions = [makeSinTinf,makeHighSinTinf,makeESinTinf,makeRampTinf,makeSquareSinTinf,makeTriangleSinTinf]
 
     # Create model to solve Greens, and the PID controller
     # trainModel = fc.X23_gToo_I(Bi, Fo, M=100)
@@ -521,32 +564,130 @@ if __name__ == '__main__':
     tInfTrain = {}
     tInfTest = {}
 
+
     rmsTrainTCoreVals = {}
     rmsTrainQVals = {}
     rmsTestTCoreVals = {}
     rmsTestQVals = {}
 
+    testQset = {}
+    testTInf = {}
+    testCoreTemp = {}
+    testSurfTemp = {}
+
+    keyList = []
+
+    # Generate List of Keys
+    # Used to combine same combinations across multiple runs together
+    for funcTrain in trainFunctions:
+        for funcTest in testFunctions:
+            keyList.append('Train-' + funcTrain.__name__ + ' Test-' + funcTest.__name__)
+
+    # Create All training tinf data
     for func in trainFunctions:
         tInfTrain[func.__name__] = (func(N, 0, tStart))
 
+    # Create all testing tinf data
     for func in testFunctions:
         tInfTest[func.__name__] = (func(N, 0, tStart))
 
+
+    # Create all of the testing data for each testing function using makeData()
+    for test in tInfTest:
+        # Produce all testing data
+        testModel = fc.X23_gToo_I(Bi, Fo, M=100)
+        n = makeData(tInfTest[test], pid, testModel, N)
+        testQset[test] = n[0]
+        testTInf[test] = n[1]
+        testCoreTemp[test] = n[2]
+        testSurfTemp[test] = n[3]
+
+    # Save All Testing Data
+    # Switched to pickle because saving data as dictionary
+    # Save TCore, its the only data set needed to test
+    test_file = open('1DGS_surfT_test', "wb")
+    pickle.dump(testCoreTemp, test_file, pickle.HIGHEST_PROTOCOL)
+    test_file.close()
+    # np.savetxt('1DGS_surfT_test.dat', testCoreTemp)
+
+    # Loop through Each training function
     for train in tInfTrain:
         print("Training with " + train)
 
         # Calculate core/surface temp and q values for the PID
+        # Save TCore and Q
         trainModel = fc.X23_gToo_I(Bi, Fo, M=100)
         r = makeData(tInfTrain[train], pid, trainModel,
-                     N)  # Make the training data using PID controller (All termperatures and q)
-        np.savetxt('1DGS_surfT_train.dat', (r[2], r[0], tInfTrain[train]))  # Save the training data
+                     N)  # Make the training data using PID controller (All temperatures and q)
+        np.savetxt('1DGS_surfT_train.dat', (r[2], r[0]))  # Save the training data
 
-        for test in tInfTest:
+
+        # Train numRuns of NN
+        # Test each against all of the testing functions
+        # Save results in yhat_test, which is a list of dictionaries
+        yhat_test = []
+        for r in range(numRuns):
+
+            SKL = SKlearn()
+            yhat_test.append(SKL.trainAndTestAll())  # This trains and tests the ANN
+
+        runNum = 1  # keeps track of which run, used to create keys
+
+        # Loop through each run, which each has one set of data for each testing function
+        for run in yhat_test:
+
+            # Loop through each testing function, grab data from the current run
+            for test in tInfTest:
+
+                GSK = greensFromSKL()  # Get temperature values from ANN output
+                gskTestData = GSK.makeData(run[test], testTInf[test])  # Temp from Testing
+
+                # RMS Calculations
+                rmsTestTCore = sqrt(mean_squared_error(testCoreTemp[test][1:], gskTestData[2]))
+                rmsTestQ = sqrt(mean_squared_error(testQset[test][11:], run[test][10:]))
+
+                key = 'Run ' + str(runNum) +': Train-' + train + ' Test-' + test
+                plotPath = './plots/Repeated/3Layer10-lbfgs/' + train + test + str(runNum) + '.png'
+                dataPath = './data/Repeated/3Layer10-lbfgs/'
+
+                rmsTestTCoreVals[key] = rmsTestTCore
+                rmsTestQVals[key] = rmsTestQ
+
+                fig, axs = plt.subplots(2, 1)
+                fig.set_size_inches(18.5, 10.5)
+                fig.suptitle(key)
+
+                axs[0].plot(testCoreTemp[test], label='PID Core Temp')
+                axs[0].plot(testSurfTemp[test], label='PID Surf Temp')
+                axs[0].set_title('Test Temperatures')
+                axs[0].plot(gskTestData[2], label='SKL Core Temp')
+                axs[0].plot(gskTestData[3], label='SKL Surface Temp')
+                axs[0].plot(testTInf[test], label='Too')
+                axs[0].set(xlabel='Time (minutes)', ylabel='Temperature (C)')
+                axs[0].text(.0, .2, "RMS TCore " + "{:.3f}".format(rmsTestTCore))
+                axs[0].legend(loc=4)
+
+                axs[1].set_title('Generation Values from Testing with New Data')
+                axs[1].plot(testQset[test], label='q values (PID)')
+                axs[1].plot(run[test], label='yhat (SKL)')
+                axs[1].legend(loc=1)
+                axs[1].text(10, 20, "RMS Q " + "{:.3f}".format(rmsTestQ))
+                axs[1].set(xlabel='Time (minutes)', ylabel='Generation (W)')
+
+                plt.tight_layout()
+                plt.savefig(plotPath, pad_inches=.3)
+                plt.close()
+
+            runNum = runNum + 1
+
+
+        '''for test in tInfTest:
             print("Testing: " + test)
+            
             testModel = fc.X23_gToo_I(Bi, Fo, M=100)
-            ndata = makeData(tInfTest[test], pid, testModel,
-                             N)  # Make the testing data using PID controller (All termperatures and q)
-            np.savetxt('1DGS_surfT_test.dat', (ndata[2], ndata[0], tInfTest[test]))  # Save the testing data
+            ndata = makeData(tInfTest[test], pid, testModel,N)  # Make the testing data using PID controller (All termperatures and q)
+            np.savetxt('1DGS_surfT_test.dat', ndata[2])  # Save the testing data
+            
             SKL = SKlearn()
             yhat_train, yhat_test = SKL.trainAndTest()  # This trains and tests the ANN
 
@@ -606,9 +747,9 @@ if __name__ == '__main__':
             axs[1, 1].text(10, 20, "RMS Q " + "{:.3f}".format(rmsTestQ))
             axs[1, 1].set(xlabel='Time (minutes)', ylabel='Generation (W)')
             plt.tight_layout()
-            plt.savefig(filePath, pad_inches=.3)
+            plt.savefig(filePath, pad_inches=.3)'''
 
-    with open(dataPath + 'rmsTrainTCore.csv', 'w', newline='') as csv_file1:
+    '''with open(dataPath + 'rmsTrainTCore.csv', 'w', newline='') as csv_file1:
         writer = csv.writer(csv_file1)
         for key, value in rmsTrainTCoreVals.items():
             writer.writerow([key, value])
@@ -616,8 +757,9 @@ if __name__ == '__main__':
     with open(dataPath + 'rmsTrainQ.csv', 'w', newline='') as csv_file2:
         writer = csv.writer(csv_file2)
         for key, value in rmsTrainQVals.items():
-            writer.writerow([key, value])
+            writer.writerow([key, value])'''
 
+    # Save all data in excel files
     with open(dataPath + 'rmsTestTCore.csv', 'w', newline='') as csv_file3:
         writer = csv.writer(csv_file3)
         for key, value in rmsTestTCoreVals.items():
@@ -628,7 +770,62 @@ if __name__ == '__main__':
         for key, value in rmsTestQVals.items():
             writer.writerow([key, value])
 
-    plt.show()
+    # Perform Average RMS and STD of RMS calculations
+    tCoreAvg = {}
+    QAvg = {}
+    tCoreSTD = {}
+    QSTD = {}
+
+    # Use masterKey to group functions together across the runs
+    for masterKey in keyList:
+        tCore = []
+        Q = []
+
+        # Write data to the same file for TCore
+        # ex. all runs for Train makeEsin Test HighSin will be in the same file
+        with open(dataPath + '/functionsTCore/' + masterKey + '.csv', 'w', newline='') as csv_file5:
+            writer = csv.writer(csv_file5)
+            for key, value in rmsTestTCoreVals.items():
+                if masterKey in key:
+                    writer.writerow([key, value])
+                    tCore.append(value)
+
+        # Write data to the same file for Q
+        # ex. all runs for Train makeEsin Test HighSin will be in the same file
+        with open(dataPath + '/functionsQ/' + masterKey + '.csv', 'w', newline='') as csv_file6:
+            writer = csv.writer(csv_file6)
+            for key, value in rmsTestQVals.items():
+                if masterKey in key:
+                    writer.writerow([key, value])
+                    Q.append(value)
+
+        # Calculate averages and STD for all data across runs
+        tCoreAvg[masterKey] = np.average(tCore)
+        QAvg[masterKey] = np.average(Q)
+        tCoreSTD[masterKey] = np.std(tCore)
+        QSTD[masterKey] = np.std(Q)
+
+    # Save the Average RMS, Average Q, STD Q, and STD RMS
+    with open(dataPath + 'AverageRMSQ.csv', 'w', newline='') as csv_file7:
+        writer = csv.writer(csv_file7)
+        for key, value in QAvg.items():
+            writer.writerow([key, value])
+
+    with open(dataPath + 'AverageRMSTCore.csv', 'w', newline='') as csv_file8:
+        writer = csv.writer(csv_file8)
+        for key, value in tCoreAvg.items():
+            writer.writerow([key, value])
+
+    with open(dataPath + 'AverageSTDQ.csv', 'w', newline='') as csv_file9:
+        writer = csv.writer(csv_file9)
+        for key, value in QSTD.items():
+            writer.writerow([key, value])
+
+    with open(dataPath + 'AverageSTDTCore.csv', 'w', newline='') as csv_file10:
+        writer = csv.writer(csv_file10)
+        for key, value in tCoreSTD.items():
+            writer.writerow([key, value])
+
 
     '''SKL = SKlearn()
     yhat_train, yhat_test = SKL.trainAndTest()  # This trains and tests the ANN
