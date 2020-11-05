@@ -1,47 +1,58 @@
-import pickle
+# Design and test NN to control generation in 1-D conduction slab with
+# constant internal temeprature and varying external conditions
+
+# Thermal Engineering Lab 2019
 
 import numpy as np
 import matplotlib.pyplot as plt
-# import PID as PID
+
 import sklearn.preprocessing as skl
 import sklearn.neural_network as NN
 from sklearn.metrics import mean_squared_error
 from math import sqrt
 from sklearn.model_selection import train_test_split
 
-# new conduction solution and PID
+# conduction solution and PID
 import forwardconduction  as fc
 import PIDivmech as PID
 from scipy import signal
 
-# Old PID Import
-# import PID as PID
+# for file I/O
 import yaml
 import csv
-
 import json
+import pickle
 
 
-###############################################################################
+################
+# Tinf functions
 
-
-
+# Square wave with a pulse width modulation
 # N: Number of time steps
-# tInit: initial temperature value
+# period: the frequency of the pulses (the PWM spans half the entire array)
+# tStart: delay before the function begins
 def makePWMTinf(N=180, period=10, tStart=75):
     tInf = np.zeros(N) # allocate the array
-    t = np.array(range(N))
+    t = np.array(range(N)) # array of time steps
+    
+    # sig is the PWN signal---sweeps through two cycles in N time steps
     sig = np.sin(4*np.pi*t[tStart:-1]/(N-tStart))
     tInf[tStart:-1] = signal.square((t[tStart:-1]-tStart) * 2 * np.pi / period,
                                     duty=(sig+1)/2 )
-
     return tInf
 
+
+# Constant (not very interesting but useful for comparisons)
+# The arguments are not used but are retained here to conform to the
+# other functions
 def makeConstantTinf( N=180, period=10, tStart=75 ):
     return np.zeros(N)
 
+
+# Simple sin wave
 # N: Number of time steps
-# tInit: initial temperature value
+# period: the frequency of the oscillations
+# tStart: delay before the function begins
 def makeSinTinf(N=180, period=10, tStart=75):
     tInf = np.zeros(N)  # allocate the array
 
@@ -51,15 +62,20 @@ def makeSinTinf(N=180, period=10, tStart=75):
     return tInf
 
 
+# Simple sin wave with higher (doubled) frequency (helper function so
+# the frequency doesn't have to be changed manually to compare two sin
+# waves)
 # N: Number of time steps
-# tInit: initial temperature value
+# period: the frequency of the oscillations
+# tStart: delay before the function begins
 def makeHighSinTinf(N=180, period=10, tStart=75):
     return makeSinTinf(N, period/2, tStart)
 
 
-
+# Square wave
 # N: Number of time steps
-# tInit: initial temperature value
+# period: the frequency of the oscillations
+# tStart: delay before the function begins
 def makeSquareTinf(N=180, period=10, tStart=75):
     tInf = np.zeros(N) # allocate
 
@@ -69,29 +85,26 @@ def makeSquareTinf(N=180, period=10, tStart=75):
     return tInf
 
 
+# Square wave
 # N: Number of time steps
-# tInit: initial temperature value
+# period: the frequency of the oscillations
+# tStart: delay before the function begins
 def makeTriangleTinf(N=180, period=10, tStart=75):
     tInf = np.zeros(N)  # allocate
 
     for i in range(tStart, N):
-        tInf[i] = signal.sawtooth((i-tStart+period/4) / period * 2 * np.pi, width=0.5)
-
+        tInf[i] = signal.sawtooth((i-tStart+period/4) / period * 2 * np.pi,
+                                  width=0.5)
     return tInf
 
 
-# N: Number of time steps
-# tInit: initial temperature value
-def makeRampTinf(N=180, tInit=0, tStart=75):
-    tInf = np.ones(N) * tInit  # Constant ambient temperature
-    freq = 2 * np.pi
+# Other possible functions for Tinf:
+# Ramp (up and down)
+# Linear (1 to -1, 0 to 1, 0 to -1, -1 to 1)???
+# ESin (not sure what this is or why it would be useful)
 
-    for i in range(N):
-        if i >= tStart:
-            tInf[i] = -1 / 4 * ((i - 75) / (N - 75)) + .5
-
-    return tInf
-
+# End Tinf functions
+####################
 
 # makeData
 # Uses PID to create training data
