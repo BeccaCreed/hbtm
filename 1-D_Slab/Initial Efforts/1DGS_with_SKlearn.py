@@ -148,72 +148,54 @@ def testSteppingClass( j ):
 
 # N: Number of time steps
 # tInit: initial temperature value
-def makeESinTinf(N=180, tInit=0, tStart=75):
-    tInf = np.ones(N) * tInit  # Constant ambient temperature
+def makePWMTinf(N=180, period=10, tStart=75):
+    tInf = np.zeros(N) # allocate the array
+    t = np.array(range(N))
+    sig = np.sin(4*np.pi*t[tStart:-1]/(N-tStart))
+    tInf[tStart:-1] = signal.square((t[tStart:-1]-tStart) * 2 * np.pi / period,
+                                    duty=(sig+1)/2 )
 
-    for i in range(N):
-        amp = .5  # amplitude of sin wave
-        if i >= tStart:
-            j = (i - 75) / (N - 75)
-            if i <= N - 50:
-                tInf[i] = amp * np.exp(-2 * j) * np.sin(2 * 20 * np.pi * j ** 2) + tInit + (
-                        i - 75) / N  # Best training data so far
-            else:
-                tInf[i] = tInf[i - 1] - 0.005
+    return tInf
+
+def makeConstantTinf( N=180, period=10, tStart=75 ):
+    return np.zeros(N)
+
+# N: Number of time steps
+# tInit: initial temperature value
+def makeSinTinf(N=180, period=10, tStart=75):
+    tInf = np.zeros(N)  # allocate the array
+
+    for i in range(tStart, N):
+        tInf[i] = np.sin((i-tStart) * 2 * np.pi / period) 
 
     return tInf
 
 
 # N: Number of time steps
 # tInit: initial temperature value
-def makeSinTinf(N=180, tInit=0, tStart=75):
-    tInf = np.ones(N) * tInit  # Constant ambient temperature
+def makeHighSinTinf(N=180, period=10, tStart=75):
+    return makeSinTinf(N, period/2, tStart)
 
-    for i in range(N):
-        amp = .25
-        if i >= tStart:
-            tInf[i] = amp * np.sin((i - 75) / (N - 75) * 4 * np.pi) + tInit + amp  # simple sine wave for testing
+
+
+# N: Number of time steps
+# tInit: initial temperature value
+def makeSquareTinf(N=180, period=10, tStart=75):
+    tInf = np.zeros(N) # allocate
+
+    for i in range(tStart, N):
+        tInf[i] = signal.square((i - tStart) / period * 2 * np.pi)
 
     return tInf
 
 
 # N: Number of time steps
 # tInit: initial temperature value
-def makeHighSinTinf(N=180, tInit=0, tStart=75):
-    tInf = np.ones(N) * tInit  # Constant ambient temperature
+def makeTriangleTinf(N=180, period=10, tStart=75):
+    tInf = np.zeros(N)  # allocate
 
-    for i in range(N):
-        amp = .25
-        if i >= tStart:
-            tInf[i] = amp * np.sin((i - 75) / (N - 75) * 6 * np.pi) + tInit + amp  # simple sine wave for testing
-
-    return tInf
-
-
-# N: Number of time steps
-# tInit: initial temperature value
-def makeSquareSinTinf(N=180, tInit=0, tStart=75):
-    tInf = np.ones(N) * tInit  # Constant ambient temperature
-    freq = 2 * np.pi
-
-    for i in range(N):
-        amp = .25
-        if i >= tStart:
-            tInf[i] = amp * (1 - signal.square((i - 75) / (N - 75) * 4 * np.pi))
-
-    return tInf
-
-
-# N: Number of time steps
-# tInit: initial temperature value
-def makeTriangleSinTinf(N=180, tInit=0, tStart=75):
-    tInf = np.ones(N) * tInit  # Constant ambient temperature
-    freq = 2 * np.pi
-
-    for i in range(N):
-        amp = .25
-        if i >= tStart:
-            tInf[i] = amp * (1 - signal.sawtooth((i - 75) / (N - 75) * 4 * np.pi))
+    for i in range(tStart, N):
+        tInf[i] = signal.sawtooth((i-tStart+period/4) / period * 2 * np.pi, width=0.5)
 
     return tInf
 
@@ -333,7 +315,7 @@ def makeNewData():
     tinfv = 0  # Initial Too
     L = 0.035
 
-    G = SteppingClass(25, L, 0.613, 0.146e-6)
+    #G = SteppingClass(25, L, 0.613, 0.146e-6)
     dt = 60
     N = 180
 
@@ -504,7 +486,7 @@ class greensFromSKL:
         Q0chop = yhat  # no longer chopped here
 
         #    T2, Q2 = np.loadtxt('1dgs_surfT_test_chopped.dat')
-        G = SteppingClass(25, L, 0.613, 0.146e-6)
+        #G = SteppingClass(25, L, 0.613, 0.146e-6)
         dt = 60
         N = 300
 
@@ -547,11 +529,14 @@ if __name__ == '__main__':
 
     # Starting Timestamp for Tinf
     tStart = 10
+    period = 20
+    amp = 0.5
+    To = 0
 
     # makeSinTinf,makeHighSinTinf,makeESinTinf,makeRampTinf,makeSquareSinTinf,makeTriangleSinTinf
     # train with square and ESin
-    trainFunctions = [makeHighSinTinf,makeSquareSinTinf, makeESinTinf]
-    testFunctions = [makeSinTinf,makeHighSinTinf,makeESinTinf,makeRampTinf,makeSquareSinTinf,makeTriangleSinTinf]
+    trainFunctions = [makeHighSinTinf,makeSquareTinf, makePWMTinf]
+    testFunctions = [makeSinTinf,makeHighSinTinf,makePWMTinf,makeRampTinf,makeSquareSinTinf,makeTriangleSinTinf]
 
     # Create model to solve Greens, and the PID controller
     # trainModel = fc.X23_gToo_I(Bi, Fo, M=100)
@@ -585,11 +570,11 @@ if __name__ == '__main__':
 
     # Create All training tinf data
     for func in trainFunctions:
-        tInfTrain[func.__name__] = (func(N, 0, tStart))
+        tInfTrain[func.__name__] = (To + amp * func(N, period, tStart))
 
     # Create all testing tinf data
     for func in testFunctions:
-        tInfTest[func.__name__] = (func(N, 0, tStart))
+        tInfTest[func.__name__] = (To + amp * func(N, period, tStart))
 
 
     # Create all of the testing data for each testing function using makeData()
