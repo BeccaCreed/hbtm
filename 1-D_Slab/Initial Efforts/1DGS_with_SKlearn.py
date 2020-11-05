@@ -24,126 +24,6 @@ import json
 
 ###############################################################################
 
-class SteppingClass:
-    '''Class that takes discrete steps with Tinf and q arrays 
-    and calculates temperature at a given x'''
-
-    # def __init__(self,t,Tinf_array,q_array,L=0.02):
-    def __init__(self, h, L, k, alpha):  # initialize class input values
-        self.h = h
-        self.L = L
-        self.k = k
-        self.alpha = alpha
-
-    def eigenvalue(self, M, Bi):  # M is number of Eigenvalues
-        b = np.zeros(M)
-        tol = 1e-9
-        for m in range(M):  # b[0]=np.min part...then to get
-            if m == 0:
-                b[m] = np.minimum(np.sqrt(Bi), np.pi / 2)
-            else:
-                b[m] = b[m - 1] + np.pi
-            err = 1.0
-            while np.abs(err) > tol:  # put all of this inside for loop
-                f = b[m] * np.sin(b[m]) - Bi * np.cos(b[m])
-                df = np.sin(b[m]) + b[m] * np.cos(b[m]) + Bi * np.sin(b[m])
-                err = f / df
-                b[m] -= err
-        return b
-
-    def greensStep(self, x, dt, Tinf_array, q_array):
-        # length of Tinf_array and q_array is the number of timesteps
-        h = self.h
-        k = self.k
-        alpha = self.alpha
-        L = self.L  # length of slab
-
-        b2 = h * L / k  # Biot Number
-        n_iterations = 40  # Need about 40 for full convergence, going low can mess up the ANN
-        term1 = 0
-        term2 = 0
-        n_timesteps = len(q_array)
-        bm_arr = self.eigenvalue(n_iterations, b2)
-        t = dt * n_timesteps
-
-        for M in range(n_iterations):  # sum over eigenvalues
-            bm = bm_arr[M]  # array of eigenvalues
-            t2 = dt
-            t1 = 0
-            sum1 = 0
-            sum2 = 0
-
-            for i in range(n_timesteps):  # sum over time steps
-                termA = 1 / (bm ** 2 * alpha) * np.exp(-bm ** 2 * alpha / L ** 2 * (t - t2))
-                termB = 1 / (bm ** 2 * alpha) * np.exp(-bm ** 2 * alpha / L ** 2 * (t - t1))
-                sum1 += (termA - termB) * q_array[i]
-                sum2 += (termA - termB) * Tinf_array[i]
-                t1 += dt
-                t2 += dt
-
-            Fm = (bm ** 2 + b2 ** 2) / (bm ** 2 + b2 ** 2 + b2) * np.cos(bm * x / L)
-            term1 += 2 * alpha * L ** 2 / (k * bm) * Fm * np.sin(bm) * sum1
-            term2 += 2 * alpha * L * Fm * np.cos(bm) * sum2 * h / k
-
-        return (term1 + term2)
-
-
-# %%
-'''
-def testSteppingClass( j ):
-
-    if j == 0:
-        # All parms unity and T_inf = 0.  The steady state solution for this
-        # block of hard-coded inputs should be T_surf = 1 and T_core = 1.5.
-        # Convergence reached at Nm = 20.
-        N = 20
-        dt = 1
-        Tinf = np.zeros( N )
-        qgen = np.ones( N )
-        L = 1
-        G = SteppingClass( 1, L, 1, 1 )
-        
-    elif j == 1:
-        # All parms unity with an oscillating generation
-        N = 80
-        dt = 1
-        times = np.linspace(0, N*dt, N)
-        Tinf = np.zeros( N )
-        qgen = 1 - np.cos( times/4 )
-        L = 1
-        G = SteppingClass( 1, L, 1, 1 )
-
-    elif j == 2:
-        # All parms unity and qgen = 0. Steady-state solution should be
-        # T_surf = T_core = 1.  Convergence reached at Nm = 40
-        N = 20
-        dt = 1
-        Tinf = np.ones( N )
-        qgen = np.zeros( N )
-        L = 1
-        G = SteppingClass( 1, L, 1, 1 )
-
-    elif j == 3:
-        # Human params.  qgen = 5600 W/m. Too = 10
-        N = 500
-        dt = 60
-        Tinf = 10 * np.ones( N )
-        qgen = 5600 * np.ones( N )
-        L = 0.035
-        G = SteppingClass( 25, L, 0.613, 0.146e-6 )
-       
-
-    coreTemp = np.zeros( N )
-    surfTemp = np.zeros( N )
-
-    for i in range( 1, N ):
-        coreTemp[i] = G.greensStep( 0, dt, Tinf[:i], qgen[:i] )
-        surfTemp[i] = G.greensStep( L, dt, Tinf[:i], qgen[:i] )
-
-    print( coreTemp[-1], surfTemp[-1] )
-
-    return qgen, Tinf, coreTemp, surfTemp   
-'''
 
 
 # N: Number of time steps
@@ -536,7 +416,7 @@ if __name__ == '__main__':
     # makeSinTinf,makeHighSinTinf,makeESinTinf,makeRampTinf,makeSquareSinTinf,makeTriangleSinTinf
     # train with square and ESin
     trainFunctions = [makeHighSinTinf,makeSquareTinf, makePWMTinf]
-    testFunctions = [makeSinTinf,makeHighSinTinf,makePWMTinf,makeRampTinf,makeSquareSinTinf,makeTriangleSinTinf]
+    testFunctions = [makeSinTinf,makeHighSinTinf,makePWMTinf,makeSquareTinf,makeTriangleTinf]
 
     # Create model to solve Greens, and the PID controller
     # trainModel = fc.X23_gToo_I(Bi, Fo, M=100)
