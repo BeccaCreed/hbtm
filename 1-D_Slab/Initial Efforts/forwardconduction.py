@@ -113,14 +113,14 @@ class X23_gToo_D():
 # step so we don't have to start over at t=0 every time.
 class X23_gToo_I():
     
-    def __init__( self, Bi, Fo, M=10, tol=1e-3 ):
+    def __init__( self, Bi, Fo, M=10, tol=1e-3, init=(0.0, 0.0) ):
         self._Bi = Bi
         self._M = M
         self._Fo = Fo
 
         # from trial and error this seems like enough discretization
         self._Nx = 41
-        self._Tx = np.zeros( self._Nx )
+        self._SS( init )
         
         self._bms = self._getEigenvalues( self._Bi, self._M, tol )
         self._Fms = self._getPrefactors( self._bms, self._Bi )
@@ -130,7 +130,17 @@ class X23_gToo_I():
         self._Hpfs = self._Fms * np.cos( self._bms ) *(1-trans)/ self._bms**2
         self._Tpfs = self._Fms * trans / self._bms
 
-        
+
+    # This provides a steady solution as an initial condition provided
+    # Q and H and known.  If not it starts with Ti = 0.0
+    def _SS( self, init ):
+        Q = init[0]
+        H = init[1]
+        x = np.linspace( 0, 1, self._Nx )
+        self._Tx = Q/2.0*(1-x**2) + Q/self._Bi + H/self._Bi
+
+    # Reinitilize the temperature distribution keeping the properties
+    # the same.
     def reset( self ):
         self._Tx = np.zeros( self._Nx )
 
@@ -206,7 +216,6 @@ class X23_gToo_I():
 
 
         self._Tx = np.copy( Tx )
-        
         return Tx[0], Tx[-1]
             
 
@@ -224,13 +233,12 @@ def verify():
 
     GTs = [0, 1]
     HTs = [0, 1]
-
     
     print("# G, H, Bi, T_ss(0), T_ss(1), T_GF(0), T_GF(1), %dT(0), %dT(1)" )
     for Bi in Bis:
         for GT in GTs:
             for HT in HTs:
-                model = X23_gToo_I( Bi, Fo/Nt, M=100 )
+                model = X23_gToo_I( Bi, Fo/Nt, M=100, init=(GT,HT) )
                 for i in range ( Nt ):
                     TGs = model.getNextTemp( GT, HT )
                 TSs = [GT/2.0 + GT/Bi + HT/Bi, GT/Bi + HT/Bi]
