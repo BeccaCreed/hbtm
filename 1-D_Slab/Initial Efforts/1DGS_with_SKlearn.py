@@ -10,7 +10,6 @@ import sklearn.preprocessing as skl
 import sklearn.neural_network as NN
 from sklearn.metrics import mean_squared_error
 from math import sqrt
-from sklearn.model_selection import train_test_split
 
 # conduction solution and PID
 import forwardconduction  as fc
@@ -18,9 +17,7 @@ import PIDivmech as PID
 from scipy import signal
 
 # for file I/O
-import yaml
 import csv
-import json
 import pickle
 
 
@@ -123,7 +120,6 @@ def makePIDData(tInf, pid, model, N=180):
     pid.setSampleTime(dt)
     qset = pid.update(0.0)
 
-    
     for i in range(N):
         qsets[i] = qset
         coreTemp_list[i], surfTemp_list[i] = model.getNextTemp(qset, tInf[i])
@@ -149,11 +145,6 @@ class SKlearn:
         for i in range( self._Nt ):
             Tdeld[:,i] = T[i:N+i]
             
-        #for i in range(self._Nt):
-        #    #Tdeld[i, 2] = T[i]
-        #    Tdeld[i, 1] = T[i]
-        #    Tdeld[i, 0] = T[i + 1]
-
         return Tdeld
 
     
@@ -197,6 +188,7 @@ class SKlearn:
         return QNet
 
 
+# Peform the forward conduction solution given the qgenss and the Tinfs
 class greensFromSKL:
 
     def __init__( self, fcmodel, Nt=2 ):
@@ -204,35 +196,15 @@ class greensFromSKL:
         self._model = fcmodel
         
     def makeFCData(self, qgens, Tinfs ):
-        #qv = 0  # Initial qgen
-        #tinfv = 0  # Initial Too
-        #L = 0.035
-        #        Tinfchop, Q0chop = np.loadtxt( 'SKLearnTestWithTrain.dat' )
 
-        #Q0chop = yhat  # no longer chopped here
-
-        #    T2, Q2 = np.loadtxt('1dgs_surfT_test_chopped.dat')
-        #G = SteppingClass(25, L, 0.613, 0.146e-6)
-        #dt = 60
         N = len(qgens)
 
         coreTemp_list = np.zeros(N)  # Preallocate space
         surfTemp_list = np.zeros(N)  # Preallocate space
 
-        #qsets = Q0chop
-        #        Tinfs[9:] = Tinfchop
-
-        #model = fc.X23_gToo_I(Bi, Fo, M=100)
         self._model.reset()
         
-        # FIXME: hardcoded range needs to reflect the number of times
-
         for i in range(N):
-            # Old Model
-            # coreTemp_list[i] = G.greensStep(0, dt, Tinfs[:i], qsets[:i])
-            # surfTemp_list[i] = G.greensStep(L, dt, Tinfs[:i], qsets[:i])
-
-            # New Model
             coreTemp_list[i], surfTemp_list[i] = self._model.getNextTemp(qgens[i], Tinfs[i])
 
         return qgens, Tinfs, coreTemp_list, surfTemp_list
@@ -242,7 +214,6 @@ if __name__ == '__main__':
     Bi = 2.0
     Fo = 0.1
 
-    # FIXME: Also have to change N in greensFromSkl around line 450
     N = 300
     Nt = 4   # number of time steps to train the ANN on
 
@@ -263,6 +234,7 @@ if __name__ == '__main__':
     # FIXME: The conduction model should know this setpoint to get a
     # good initial tmeprature
     pid = PID.PID(0.5/Fo, 1/Fo, 0.0, setpoint=1.0)
+    fcmodel = fc.X23_gToo_I( Bi, Fo, M=100 )
 
     # Generate Too values for testing and training
     # tInfTrain = makeESinTinf(N,0)
@@ -300,8 +272,8 @@ if __name__ == '__main__':
     # Create all of the data from the PID that will be used for
     # comparison to the NN
     for test in tInfTest:
-        testModel = fc.X23_gToo_I(Bi, Fo, M=100)
-        n = makePIDData(tInfTest[test], pid, testModel, N)
+        fcmodel.reset()
+        n = makePIDData(tInfTest[test], pid, fcmodel, N)
         testQset[test] = n[0]
         testTInf[test] = n[1]
         testCoreTemp[test] = n[2]
@@ -317,8 +289,8 @@ if __name__ == '__main__':
         print("Training with " + train)
 
         # Calculate core/surface temp and q values from the PID
-        trainModel = fc.X23_gToo_I(Bi, Fo, M=100)
-        r = makePIDData(tInfTrain[train], pid, trainModel, N)
+        fcmodel.reset()
+        r = makePIDData(tInfTrain[train], pid, fcmodel, N)
         np.savetxt('1DGS_surfT_train.dat', (r[2], r[0])) 
 
         # Train numRuns of NN
@@ -339,7 +311,7 @@ if __name__ == '__main__':
             # Loop through each testing function, grab data from the current run
             for test in tInfTest:
 
-                GSK = greensFromSKL( trainModel, Nt )  # Get temperature values from ANN output
+                GSK = greensFromSKL( fcmodel, Nt )  # Get temperature values from ANN output
                 gskTestData = GSK.makeFCData(run[test], testTInf[test])  # Temp from Testing
                 # RMS Calculations
                 # FIXME: Why the offset?
