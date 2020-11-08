@@ -117,10 +117,11 @@ class X23_gToo_I():
         self._Bi = Bi
         self._M = M
         self._Fo = Fo
+        self._init = init
 
         # from trial and error this seems like enough discretization
         self._Nx = 41
-        self._SS( init )
+        self._SS()
         
         self._bms = self._getEigenvalues( self._Bi, self._M, tol )
         self._Fms = self._getPrefactors( self._bms, self._Bi )
@@ -133,16 +134,16 @@ class X23_gToo_I():
 
     # This provides a steady solution as an initial condition provided
     # Q and H and known.  If not it starts with Ti = 0.0
-    def _SS( self, init ):
-        Q = init[0]
-        H = init[1]
+    def _SS( self ):
+        Q = self._init[0]
+        H = self._init[1]
         x = np.linspace( 0, 1, self._Nx )
         self._Tx = Q/2.0*(1-x**2) + Q/self._Bi + H/self._Bi
 
     # Reinitilize the temperature distribution keeping the properties
     # the same.
     def reset( self ):
-        self._Tx = np.zeros( self._Nx )
+        self._SS()
 
     def printInputs( self ):
         fmtstr = "# {} = {}" 
