@@ -215,9 +215,9 @@ if __name__ == '__main__':
     Fo = 0.1
 
     N = 300
-    Nt = 4   # number of time steps to train the ANN on
+    Nt = 2   # number of time steps to train the ANN on
 
-    numRuns = 1
+    numRuns = 6
 
     # Starting Timestamp for Tinf
     tStart = 10
