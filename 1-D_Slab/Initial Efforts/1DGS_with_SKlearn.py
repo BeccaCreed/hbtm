@@ -146,23 +146,27 @@ class SKlearn:
             Tdeld[:,i] = T[i:N+i]
             
         return Tdeld
-
     
     # Loads training data from 1DGS_surfT_train.dat, which includes
     # TCore and QTrain from the training function Test multiple times
     # against each set in the testing data in 1DGS_surfT_test.dat
-    def trainAndTestAll(self):
-        TTrain, QTrain = np.loadtxt('1DGS_surfT_train.dat')
+    def trainAndTestAll(self,layers,nodes):
+        TSurfTrain, QTrain = np.loadtxt('1DGS_surfT_train.dat')
         scaler = skl.StandardScaler(copy=False)
-        scaler.fit(TTrain.reshape(-1, 1))
-        scaler.transform(TTrain.reshape(-1, 1))
+        scaler.fit(TSurfTrain.reshape(-1, 1))
+        scaler.transform(TSurfTrain.reshape(-1, 1))
 
         # Do the previous time step magic
-        T_train = self.makeDelT(TTrain)
+        T_train = self.makeDelT(TSurfTrain)
         Q_train = QTrain[0:-(self._Nt-1)]
 
+        totNodes = []
+        for val in range(layers):
+            totNodes.append(nodes)
+
+
         # Define and train the NN
-        mlp = NN.MLPRegressor(hidden_layer_sizes=(10,10,10),
+        mlp = NN.MLPRegressor(hidden_layer_sizes=(totNodes),
                               max_iter=100000, solver='lbfgs')
         mlp.fit(T_train, Q_train)
 
@@ -170,17 +174,17 @@ class SKlearn:
 
         test_file = open("1DGS_surfT_test", "rb")
         test_file.seek(0)
-        TTest = pickle.load(test_file)
+        TSurfTest = pickle.load(test_file)
 
         # Holds results for N runs
         QNet = {}
 
-        for key in TTest:
+        for key in TSurfTest:
              #Scale Test Function
              scaler = skl.StandardScaler(copy=False)
-             scaler.fit(TTest[key].reshape(-1, 1))
-             scaler.transform(TTest[key].reshape(-1, 1))
-             T_test = self.makeDelT(TTest[key])
+             scaler.fit(TSurfTest[key].reshape(-1, 1))
+             scaler.transform(TSurfTest[key].reshape(-1, 1))
+             T_test = self.makeDelT(TSurfTest[key])
 
              # Test N times, store all data
              QNet[key]= mlp.predict(T_test)
@@ -215,15 +219,18 @@ if __name__ == '__main__':
     Fo = 0.1
 
     N = 300
-    Nt = 2   # number of time steps to train the ANN on
+    Nt = 10   # number of time steps to train the ANN on
 
-    numRuns = 6
+    numRuns = 30    # Number of times to repeat trials for averages
 
     # Starting Timestamp for Tinf
     tStart = 10
     period = 20
     amp = 0.5
     To = 0
+
+    layers = [1,2,3]
+    numNodes = [5,10,15,20]
 
     # define the functions to train with and test
     trainFunctions = [makeHighSinTinf, makeSquareTinf, makePWMTinf]
@@ -279,149 +286,159 @@ if __name__ == '__main__':
         testCoreTemp[test] = n[2]
         testSurfTemp[test] = n[3]
 
-    # Save TCore from the PID testing data with pickle
+    # Save TSurface from the PID testing data with pickle
+    # Used for testing the NN
     test_file = open('1DGS_surfT_test', "wb")
-    pickle.dump(testCoreTemp, test_file, pickle.HIGHEST_PROTOCOL)
+    pickle.dump(testSurfTemp, test_file, pickle.HIGHEST_PROTOCOL)
     test_file.close()
 
-    # Loop through each training function
-    for train in tInfTrain:
-        print("Training with " + train)
+    # Train each layer and node combinations
+    for layer in layers:
+        for nodes in numNodes:
+            print('Layer: ', layer,' Nodes: ',nodes)
+            # Loop through each training function
+            for train in tInfTrain:
 
-        # Calculate core/surface temp and q values from the PID
-        fcmodel.reset()
-        r = makePIDData(tInfTrain[train], pid, fcmodel, N)
-        np.savetxt('1DGS_surfT_train.dat', (r[2], r[0])) 
+                # Calculate core/surface temp and q values from the PID
+                fcmodel.reset()
+                r = makePIDData(tInfTrain[train], pid, fcmodel, N)
 
-        # Train numRuns of NN
-        # Test each against all of the testing functions
-        # Save results in yhat_test, which is a list of dictionaries
-        yhat_test = []
-        for r in range(numRuns):
-            # This trains and tests the ANN
-            SKL = SKlearn( Nt )
-            yhat_test.append(SKL.trainAndTestAll())
-            
-        runNum = 1  # keeps track of which run, used to create keys
+                # Save TSurface and Q for training NN
+                np.savetxt('1DGS_surfT_train.dat', (r[3], r[0]))
 
-        # Loop through each run, which each has one set of data for
-        # each testing function
-        for run in yhat_test:
+                # Train numRuns of NN
+                # Test each against all of the testing functions
+                # Save results in yhat_test, which is a list of dictionaries
+                yhat_test = []
+                for r in range(numRuns):
+                    # This trains and tests the ANN
+                    SKL = SKlearn(Nt)
+                    yhat_test.append(SKL.trainAndTestAll(layer,nodes))
 
-            # Loop through each testing function, grab data from the current run
-            for test in tInfTest:
+                runNum = 1  # keeps track of which run, used to create keys
 
-                GSK = greensFromSKL( fcmodel, Nt )  # Get temperature values from ANN output
-                gskTestData = GSK.makeFCData(run[test], testTInf[test])  # Temp from Testing
-                # RMS Calculations
-                # FIXME: Why the offset?
-                eoa = -(Nt-2)
-                rmsTestTCore = sqrt(mean_squared_error(testCoreTemp[test][1:eoa], gskTestData[2]))
+                # Loop through each run, which each has one set of data for
+                # each testing function
+                for run in yhat_test:
 
-                rmsTestQ = sqrt(mean_squared_error(testQset[test][11:eoa], run[test][10:]))
+                    # Loop through each testing function, grab data from the current run
+                    for test in tInfTest:
+                        GSK = greensFromSKL(fcmodel, Nt)  # Get temperature values from ANN output
+                        gskTestData = GSK.makeFCData(run[test], testTInf[test])  # Temp from Testing
+                        # RMS Calculations
+                        # FIXME: Why the offset?
+                        start = (Nt - 1)
 
-                key = 'Run ' + str(runNum) +': Train-' + train + ' Test-' + test
-                plotPath = './plots/Repeated/3Layer10-lbfgs/' + train + test + str(runNum) + '.png'
-                dataPath = './data/Repeated/3Layer10-lbfgs/'
+                        lengthA = len(testCoreTemp[test])
+                        lengthB = len(gskTestData[2])
+                        lengthD = len(testQset[test])
+                        lengthC = len(run[test])
 
-                rmsTestTCoreVals[key] = rmsTestTCore
-                rmsTestQVals[key] = rmsTestQ
+                        rmsTestTCore = sqrt(mean_squared_error(testCoreTemp[test][start:], gskTestData[2]))
+                        rmsTestQ = sqrt(mean_squared_error(testQset[test][10 + start:], run[test][10:]))
 
-                fig, axs = plt.subplots(2, 1)
-                fig.set_size_inches(18.5, 10.5)
-                fig.suptitle(key)
+                        key = 'Run ' + str(runNum) + ': Train-' + train + ' Test-' + test
+                        plotPath = './plots/30Run/10Timestep/' + str(layer) + 'Layer' + str(nodes) + '-lbfgs/' + train + test + str(runNum) + '.png'
+                        dataPath = './data/30Run/10Timestep/' + str(layer) + 'Layer' + str(nodes) + '-lbfgs/'
 
-                axs[0].plot(testCoreTemp[test], label='PID Core Temp')
-                axs[0].plot(testSurfTemp[test], label='PID Surf Temp')
-                axs[0].set_title('Test Temperatures')
-                axs[0].plot(gskTestData[2], label='SKL Core Temp')
-                axs[0].plot(gskTestData[3], label='SKL Surface Temp')
-                axs[0].plot(testTInf[test], label='Too')
-                axs[0].set(xlabel='Time (minutes)', ylabel='Temperature (C)')
-                axs[0].text(.0, .2, "RMS TCore " + "{:.3f}".format(rmsTestTCore))
-                axs[0].legend(loc=4)
+                        rmsTestTCoreVals[key] = rmsTestTCore
+                        rmsTestQVals[key] = rmsTestQ
 
-                axs[1].set_title('Generation Values from Testing with New Data')
-                axs[1].plot(testQset[test], label='q values (PID)')
-                axs[1].plot(run[test], label='yhat (SKL)')
-                axs[1].legend(loc=1)
-                axs[1].text(10, 20, "RMS Q " + "{:.3f}".format(rmsTestQ))
-                axs[1].set(xlabel='Time (minutes)', ylabel='Generation (W)')
+                        fig, axs = plt.subplots(2, 1)
+                        fig.set_size_inches(18.5, 10.5)
+                        fig.suptitle(key)
 
-                plt.tight_layout()
-                plt.savefig(plotPath, pad_inches=.3)
-                plt.close()
+                        axs[0].plot(testCoreTemp[test], label='PID Core Temp')
+                        axs[0].plot(testSurfTemp[test], label='PID Surf Temp')
+                        axs[0].set_title('Test Temperatures')
+                        axs[0].plot(gskTestData[2], label='SKL Core Temp')
+                        axs[0].plot(gskTestData[3], label='SKL Surface Temp')
+                        axs[0].plot(testTInf[test], label='Too')
+                        axs[0].set(xlabel='Time (minutes)', ylabel='Temperature (C)')
+                        axs[0].text(.0, .2, "RMS TCore " + "{:.3f}".format(rmsTestTCore))
+                        axs[0].legend(loc=4)
 
-            runNum = runNum + 1
+                        axs[1].set_title('Generation Values from Testing with New Data')
+                        axs[1].plot(testQset[test], label='q values (PID)')
+                        axs[1].plot(run[test], label='yhat (SKL)')
+                        axs[1].legend(loc=1)
+                        axs[1].text(10, 20, "RMS Q " + "{:.3f}".format(rmsTestQ))
+                        axs[1].set(xlabel='Time (minutes)', ylabel='Generation (W)')
 
+                        plt.tight_layout()
+                        plt.savefig(plotPath, pad_inches=.3)
+                        plt.close()
 
+                    runNum = runNum + 1
 
-    # Save all data in excel files
-    with open(dataPath + 'rmsTestTCore.csv', 'w', newline='') as csv_file3:
-        writer = csv.writer(csv_file3)
-        for key, value in rmsTestTCoreVals.items():
-            writer.writerow([key, value])
-
-    with open(dataPath + 'rmsTestQ.csv', 'w', newline='') as csv_file4:
-        writer = csv.writer(csv_file4)
-        for key, value in rmsTestQVals.items():
-            writer.writerow([key, value])
-
-    # Perform Average RMS and STD of RMS calculations
-    tCoreAvg = {}
-    QAvg = {}
-    tCoreSTD = {}
-    QSTD = {}
-
-    # Use masterKey to group functions together across the runs
-    for masterKey in keyList:
-        tCore = []
-        Q = []
-
-        # Write data to the same file for TCore
-        # ex. all runs for Train makeEsin Test HighSin will be in the same file
-        with open(dataPath + '/functionsTCore/' + masterKey + '.csv', 'w', newline='') as csv_file5:
-            writer = csv.writer(csv_file5)
-            for key, value in rmsTestTCoreVals.items():
-                if masterKey in key:
+            # Save all data in excel files
+            with open(dataPath + 'rmsTestTCore.csv', 'w', newline='') as csv_file3:
+                writer = csv.writer(csv_file3)
+                for key, value in rmsTestTCoreVals.items():
                     writer.writerow([key, value])
-                    tCore.append(value)
 
-        # Write data to the same file for Q
-        # ex. all runs for Train makeEsin Test HighSin will be in the same file
-        with open(dataPath + '/functionsQ/' + masterKey + '.csv', 'w', newline='') as csv_file6:
-            writer = csv.writer(csv_file6)
-            for key, value in rmsTestQVals.items():
-                if masterKey in key:
+            with open(dataPath + 'rmsTestQ.csv', 'w', newline='') as csv_file4:
+                writer = csv.writer(csv_file4)
+                for key, value in rmsTestQVals.items():
                     writer.writerow([key, value])
-                    Q.append(value)
 
-        # Calculate averages and STD for all data across runs
-        tCoreAvg[masterKey] = np.average(tCore)
-        QAvg[masterKey] = np.average(Q)
-        tCoreSTD[masterKey] = np.std(tCore)
-        QSTD[masterKey] = np.std(Q)
+            # Perform Average RMS and STD of RMS calculations
+            tCoreAvg = {}
+            QAvg = {}
+            tCoreSTD = {}
+            QSTD = {}
 
-    # Save the Average RMS, Average Q, STD Q, and STD RMS
-    with open(dataPath + 'AverageRMSQ.csv', 'w', newline='') as csv_file7:
-        writer = csv.writer(csv_file7)
-        for key, value in QAvg.items():
-            writer.writerow([key, value])
+            # Use masterKey to group functions together across the runs
+            for masterKey in keyList:
+                tCore = []
+                Q = []
 
-    with open(dataPath + 'AverageRMSTCore.csv', 'w', newline='') as csv_file8:
-        writer = csv.writer(csv_file8)
-        for key, value in tCoreAvg.items():
-            writer.writerow([key, value])
+                # Write data to the same file for TCore
+                # ex. all runs for Train makeEsin Test HighSin will be in the same file
+                with open(dataPath + '/functionsTCore/' + masterKey + '.csv', 'w', newline='') as csv_file5:
+                    writer = csv.writer(csv_file5)
+                    for key, value in rmsTestTCoreVals.items():
+                        if masterKey in key:
+                            writer.writerow([key, value])
+                            tCore.append(value)
 
-    with open(dataPath + 'AverageSTDQ.csv', 'w', newline='') as csv_file9:
-        writer = csv.writer(csv_file9)
-        for key, value in QSTD.items():
-            writer.writerow([key, value])
+                # Write data to the same file for Q
+                # ex. all runs for Train makeEsin Test HighSin will be in the same file
+                with open(dataPath + '/functionsQ/' + masterKey + '.csv', 'w', newline='') as csv_file6:
+                    writer = csv.writer(csv_file6)
+                    for key, value in rmsTestQVals.items():
+                        if masterKey in key:
+                            writer.writerow([key, value])
+                            Q.append(value)
 
-    with open(dataPath + 'AverageSTDTCore.csv', 'w', newline='') as csv_file10:
-        writer = csv.writer(csv_file10)
-        for key, value in tCoreSTD.items():
-            writer.writerow([key, value])
+                # Calculate averages and STD for all data across runs
+                tCoreAvg[masterKey] = np.average(tCore)
+                QAvg[masterKey] = np.average(Q)
+                tCoreSTD[masterKey] = np.std(tCore)
+                QSTD[masterKey] = np.std(Q)
+
+            # Save the Average RMS, Average Q, STD Q, and STD RMS
+            with open(dataPath + 'AverageRMSQ.csv', 'w', newline='') as csv_file7:
+                writer = csv.writer(csv_file7)
+                for key, value in QAvg.items():
+                    writer.writerow([key, value])
+
+            with open(dataPath + 'AverageRMSTCore.csv', 'w', newline='') as csv_file8:
+                writer = csv.writer(csv_file8)
+                for key, value in tCoreAvg.items():
+                    writer.writerow([key, value])
+
+            with open(dataPath + 'AverageSTDQ.csv', 'w', newline='') as csv_file9:
+                writer = csv.writer(csv_file9)
+                for key, value in QSTD.items():
+                    writer.writerow([key, value])
+
+            with open(dataPath + 'AverageSTDTCore.csv', 'w', newline='') as csv_file10:
+                writer = csv.writer(csv_file10)
+                for key, value in tCoreSTD.items():
+                    writer.writerow([key, value])
+
+
 
 
 
